@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { DoseRecord, Profile } from '../types';
 import {
+  addGrowthMeasurement as addGrowthMeasurementIn,
   createProfile,
   doseHistory,
   mergeImport,
@@ -17,16 +18,19 @@ import {
   recordDoseEvent as recordDoseEventIn,
   removeDose as removeDoseIn,
   removeDoseEvent as removeDoseEventIn,
+  removeGrowthMeasurement as removeGrowthMeasurementIn,
   removeVaccineHistory as removeVaccineHistoryIn,
   resolveDoseReview as resolveDoseReviewIn,
   reviewQueue,
   updateDoseEvent as updateDoseEventIn,
+  type AddGrowthResult,
   type NewProfileInput,
   type CreateProfileResult,
   type ImportResult,
   type RecordDoseResult,
 } from '../lib/profileStore';
 import type { DoseEventPatch, DoseHistory, NewDoseEventInput } from '../lib/doseLedger';
+import type { NewGrowthInput } from '../lib/whoGrowth';
 import { LEGACY_STORAGE_KEYS, readJSONWithLegacy, STORAGE_KEYS, writeJSON } from '../lib/storage';
 
 interface ProfilesContextValue {
@@ -55,6 +59,10 @@ interface ProfilesContextValue {
   removeDose: (profileId: string, vaccineId: string, eventId: string) => void;
   /** Delete every dose of one vaccine. Distinct, and confirmed separately. */
   removeVaccineHistory: (profileId: string, vaccineId: string) => void;
+  /** Append one validated height/weight measurement to a member's growth log. */
+  addGrowthMeasurement: (profileId: string, input: NewGrowthInput) => AddGrowthResult;
+  /** Remove one height/weight measurement by id. */
+  removeGrowthMeasurement: (profileId: string, measurementId: string) => void;
   replaceAll: (next: Profile[]) => void;
   importJSON: (raw: string) => ImportResult;
   getProfile: (id: string | null | undefined) => Profile | undefined;
@@ -167,6 +175,19 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     setProfiles((current) => removeVaccineHistoryIn(current, profileId, vaccineId));
   }, []);
 
+  const addGrowthMeasurement = useCallback((profileId: string, input: NewGrowthInput): AddGrowthResult => {
+    let result: AddGrowthResult = { profiles: [], error: 'missing-date' };
+    setProfiles((current) => {
+      result = addGrowthMeasurementIn(current, profileId, input);
+      return result.error ? current : result.profiles;
+    });
+    return result;
+  }, []);
+
+  const removeGrowthMeasurement = useCallback((profileId: string, measurementId: string) => {
+    setProfiles((current) => removeGrowthMeasurementIn(current, profileId, measurementId));
+  }, []);
+
   const replaceAll = useCallback((next: Profile[]) => {
     setProfiles(normaliseProfiles(next));
   }, []);
@@ -208,6 +229,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       removeDoseEvent,
       removeDose,
       removeVaccineHistory,
+      addGrowthMeasurement,
+      removeGrowthMeasurement,
       replaceAll,
       importJSON,
       getProfile,
@@ -228,6 +251,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       removeDoseEvent,
       removeDose,
       removeVaccineHistory,
+      addGrowthMeasurement,
+      removeGrowthMeasurement,
       replaceAll,
       importJSON,
       getProfile,

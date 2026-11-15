@@ -1,0 +1,76 @@
+/* ---------------------------------------------------------------------------
+ * Bangla (বাংলা) strings for child growth tracking & WHO standards.
+ *
+ * Kept in sync with `growth.en.ts`.
+ * ------------------------------------------------------------------------- */
+import type { TranslationDictionary } from '../types';
+
+export const bn: TranslationDictionary = {
+  'growth.title': 'শিশুর বৃদ্ধি ও WHO মানদণ্ড',
+  'growth.subtitle':
+    'টিকার রেকর্ডের পাশাপাশি WHO-এর ০–৫ বছর বয়সের মানদণ্ডের বিপরীতে উচ্চতা ও ওজন অনুসরণ করুন।',
+  'growth.metric.weight': 'ওজন (কেজি)',
+  'growth.metric.height': 'উচ্চতা / দৈর্ঘ্য (সেমি)',
+  'growth.window.auto': 'স্বয়ংক্রিয়',
+  'growth.window.12m': '০–১২ মাস',
+  'growth.window.24m': '০–২৪ মাস',
+  'growth.window.36m': '০–৩৬ মাস',
+  'growth.window.60m': '০–৬০ মাস',
+  'growth.showVaccines': 'চার্টে টিকা দেখান',
+  'growth.log.button': 'পরিমাপ যুক্ত করুন',
+  'growth.log.firstButton': 'প্রথম পরিমাপ যুক্ত করুন',
+  'growth.log.cancel': 'ফর্ম বন্ধ করুন',
+  'growth.log.date': 'পরিমাপের তারিখ',
+  'growth.log.weight': 'ওজন (কেজি)',
+  'growth.log.height': 'উচ্চতা / দৈর্ঘ্য (সেমি)',
+  'growth.log.notes': 'নোট (ঐচ্ছিক)',
+  'growth.log.notesPlaceholder': 'যেমন: ১৪ সপ্তাহের ইপিআই ক্লিনিক ভিজিট',
+  'growth.log.save': 'পরিমাপ সংরক্ষণ করুন',
+  'growth.log.saved': '{0}-এর বৃদ্ধির পরিমাপ সংরক্ষিত হয়েছে',
+  'growth.log.removed': 'বৃদ্ধির পরিমাপ মুছে ফেলা হয়েছে',
+  'growth.error.missing-date': 'অনুগ্রহ করে পরিমাপের তারিখ লিখুন।',
+  'growth.error.invalid-date': 'অনুগ্রহ করে সঠিক তারিখ লিখুন।',
+  'growth.error.future-date': 'পরিমাপের তারিখ ভবিষ্যতের হতে পারে না।',
+  'growth.error.before-birth': 'পরিমাপের তারিখ জন্ম তারিখের আগে হতে পারে না।',
+  'growth.error.missing-measurement': 'কমপক্ষে ওজন বা উচ্চতা লিখুন।',
+  'growth.error.invalid-weight': 'ওজন ০.৫ থেকে ১২০ কেজির মধ্যে হতে হবে।',
+  'growth.error.invalid-height': 'উচ্চতা/দৈর্ঘ্য ২৫ থেকে ২২০ সেমির মধ্যে হতে হবে।',
+  'growth.empty.title': 'এখনো কোনো উচ্চতা বা ওজনের পরিমাপ নেই',
+  'growth.empty.body':
+    '{0}-এর জন্য WHO পার্সেন্টাইল ব্যান্ড উপরে দেখানো হয়েছে। টিকার পাশাপাশি বৃদ্ধি তুলনা করতে প্রতিটি চেকআপ বা ইপিআই ভিজিটে পরিমাপ যুক্ত করুন।',
+  'growth.legend.child': 'রেকর্ডকৃত পরিমাপ',
+  'growth.legend.p50': 'WHO ৫০তম (মধ্যক)',
+  'growth.legend.core': 'WHO ১৫তম–৮৫তম',
+  'growth.legend.outer': 'WHO ৩য়–৯৭তম',
+  'growth.legend.vaccines': 'প্রদত্ত টিকা',
+  'growth.axis.ageMonths': 'বয়স (মাস)',
+  'growth.axis.weightKg': 'ওজন (কেজি)',
+  'growth.axis.heightCm': 'উচ্চতা / দৈর্ঘ্য (সেমি)',
+  'growth.band.below-p3': '৩য় পার্সেন্টাইলের নিচে',
+  'growth.band.p3-p15': '৩য়–১৫তম পার্সেন্টাইল',
+  'growth.band.p15-p85': '১৫তম–৮৫তম পার্সেন্টাইল (স্বাভাবিক পরিসর)',
+  'growth.band.p85-p97': '৮৫তম–৯৭তম পার্সেন্টাইল',
+  'growth.band.above-p97': '৯৭তম পার্সেন্টাইলের উপরে',
+  'growth.summary.latestWeight': 'সর্বশেষ ওজন',
+  'growth.summary.latestHeight': 'সর্বশেষ উচ্চতা',
+  'growth.summary.whoMedian': 'এই বয়সে WHO মধ্যক: {0}',
+  'growth.summary.percentileEst': 'প্রায় {0}তম পার্সেন্টাইল',
+  'growth.summary.beyondWho':
+    'বয়স ৬০ মাসের বেশি — পরিমাপ সংরক্ষিত আছে, তবে WHO ০–৫ বছর কার্ভ ৬০ মাস পর্যন্ত প্রযোজ্য।',
+  'growth.summary.neutralCurveNote':
+    'লিঙ্গ "অন্যান্য" বা নির্ধারিত নয় — মেয়ে ও ছেলেদের গড় WHO কার্ভ দেখানো হচ্ছে। নির্দিষ্ট কার্ভের জন্য সদস্যের তথ্য হালনাগাদ করুন।',
+  'growth.history.title': 'বৃদ্ধি ও চেকআপ লগ',
+  'growth.history.date': 'তারিখ ও বয়স',
+  'growth.history.weight': 'ওজন',
+  'growth.history.height': 'উচ্চতা',
+  'growth.history.whoBand': 'WHO ব্যান্ড',
+  'growth.history.vaccines': 'আশেপাশের টিকা',
+  'growth.history.remove': 'পরিমাপ মুছুন',
+  'growth.history.confirmTitle': 'পরিমাপ মুছবেন?',
+  'growth.history.confirmBody': '{0} তারিখের পরিমাপটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।',
+  'growth.export.csv': 'বৃদ্ধি CSV ডাউনলোড',
+  'growth.tooltip.age': 'বয়স: {0} মাস',
+  'growth.tooltip.vaccinesGiven': 'এই বয়সের টিকা',
+  'growth.disclaimer':
+    'WHO শিশু বৃদ্ধি মানদণ্ড (০–৬০ মাস: ০–২৪ মাসে শোয়া দৈর্ঘ্য, ২৪+ মাসে দাঁড়ানো উচ্চতা)। পার্সেন্টাইল ব্যান্ড শুধুমাত্র তথ্যগত — স্বাস্থ্য উদ্বেগের জন্য শিশু বিশেষজ্ঞ বা স্বাস্থ্যকর্মীর (১৬২৬৩) পরামর্শ নিন।',
+};

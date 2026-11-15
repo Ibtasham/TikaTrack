@@ -4,7 +4,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { join } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 function resolveBase(): string {
   const raw = process.env.VITE_BASE || '/';
@@ -112,29 +112,40 @@ function pwaAssets(): Plugin {
   };
 }
 
-export default defineConfig({
-  base,
-  plugins: [react(), tailwindcss(), spaFallback(), pwaAssets()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const mapsKey = env.VITE_GOOGLE_MAPS_API_KEY || env.GOOGLE_MAPS_API_KEY || '';
+  return {
+    base,
+    plugins: [react(), tailwindcss(), spaFallback(), pwaAssets()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
     },
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 3000,
-    strictPort: true,
-    hmr: process.env.DISABLE_HMR !== 'true',
-    watch: process.env.DISABLE_HMR === 'true' ? null : {},
-  },
-  preview: {
-    host: '0.0.0.0',
-    port: 4173,
-  },
-  build: {
-    target: 'es2022',
-    sourcemap: process.env.TIKATRACK_SOURCEMAPS !== 'false',
-    reportCompressedSize: false,
-    chunkSizeWarningLimit: 700,
-  },
+    ...(mapsKey && !env.VITE_GOOGLE_MAPS_API_KEY
+      ? {
+          define: {
+            'import.meta.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify(mapsKey),
+          },
+        }
+      : {}),
+    server: {
+      host: '0.0.0.0',
+      port: 3000,
+      strictPort: true,
+      hmr: process.env.DISABLE_HMR !== 'true',
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    preview: {
+      host: '0.0.0.0',
+      port: 4173,
+    },
+    build: {
+      target: 'es2022',
+      sourcemap: process.env.TIKATRACK_SOURCEMAPS !== 'false',
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 700,
+    },
+  };
 });

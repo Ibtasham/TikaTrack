@@ -1,0 +1,76 @@
+/* ---------------------------------------------------------------------------
+ * English strings for child growth tracking & WHO standards.
+ *
+ * Kept in sync with `growth.bn.ts`.
+ * ------------------------------------------------------------------------- */
+import type { TranslationDictionary } from '../types';
+
+export const en: TranslationDictionary = {
+  'growth.title': 'Child Growth & WHO Standards',
+  'growth.subtitle':
+    'Track height and weight against WHO 0–5 year curves alongside recorded vaccinations.',
+  'growth.metric.weight': 'Weight (kg)',
+  'growth.metric.height': 'Height / Length (cm)',
+  'growth.window.auto': 'Auto',
+  'growth.window.12m': '0–12 mo',
+  'growth.window.24m': '0–24 mo',
+  'growth.window.36m': '0–36 mo',
+  'growth.window.60m': '0–60 mo',
+  'growth.showVaccines': 'Vaccines on chart',
+  'growth.log.button': 'Log measurement',
+  'growth.log.firstButton': 'Log first measurement',
+  'growth.log.cancel': 'Close form',
+  'growth.log.date': 'Measurement date',
+  'growth.log.weight': 'Weight (kg)',
+  'growth.log.height': 'Height / Length (cm)',
+  'growth.log.notes': 'Notes (optional)',
+  'growth.log.notesPlaceholder': 'e.g. 14-week EPI clinic visit',
+  'growth.log.save': 'Save measurement',
+  'growth.log.saved': 'Growth measurement saved for {0}',
+  'growth.log.removed': 'Growth measurement removed',
+  'growth.error.missing-date': 'Please enter a measurement date.',
+  'growth.error.invalid-date': 'Please enter a valid date.',
+  'growth.error.future-date': 'Measurement date cannot be in the future.',
+  'growth.error.before-birth': 'Measurement date cannot be earlier than date of birth.',
+  'growth.error.missing-measurement': 'Enter at least weight or height.',
+  'growth.error.invalid-weight': 'Weight must be between 0.5 and 120 kg.',
+  'growth.error.invalid-height': 'Height/length must be between 25 and 220 cm.',
+  'growth.empty.title': 'No height or weight measurements yet',
+  'growth.empty.body':
+    'WHO percentile bands for {0} are plotted above. Log measurements at each checkup or EPI visit to compare growth alongside vaccines.',
+  'growth.legend.child': 'Recorded measurement',
+  'growth.legend.p50': 'WHO 50th (median)',
+  'growth.legend.core': 'WHO 15th–85th',
+  'growth.legend.outer': 'WHO 3rd–97th',
+  'growth.legend.vaccines': 'Vaccine given',
+  'growth.axis.ageMonths': 'Age (months)',
+  'growth.axis.weightKg': 'Weight (kg)',
+  'growth.axis.heightCm': 'Height / Length (cm)',
+  'growth.band.below-p3': 'Below 3rd percentile',
+  'growth.band.p3-p15': '3rd–15th percentile',
+  'growth.band.p15-p85': '15th–85th percentile (typical range)',
+  'growth.band.p85-p97': '85th–97th percentile',
+  'growth.band.above-p97': 'Above 97th percentile',
+  'growth.summary.latestWeight': 'Latest weight',
+  'growth.summary.latestHeight': 'Latest height',
+  'growth.summary.whoMedian': 'WHO median at this age: {0}',
+  'growth.summary.percentileEst': '~{0}th percentile',
+  'growth.summary.beyondWho':
+    'Older than 60 months — measurements are saved, while WHO 0–5 year curves apply up to 60 months.',
+  'growth.summary.neutralCurveNote':
+    'Gender is set to "other" or unset — showing midpoint WHO girls/boys curve. Update member details for sex-specific curves.',
+  'growth.history.title': 'Growth & Checkup Log',
+  'growth.history.date': 'Date & Age',
+  'growth.history.weight': 'Weight',
+  'growth.history.height': 'Height',
+  'growth.history.whoBand': 'WHO band',
+  'growth.history.vaccines': 'Nearby vaccines',
+  'growth.history.remove': 'Remove measurement',
+  'growth.history.confirmTitle': 'Remove measurement?',
+  'growth.history.confirmBody': 'Remove the measurement recorded on {0}? This cannot be undone.',
+  'growth.export.csv': 'Export growth CSV',
+  'growth.tooltip.age': 'Age: {0} months',
+  'growth.tooltip.vaccinesGiven': 'Vaccines at this age',
+  'growth.disclaimer':
+    'WHO Child Growth Standards (0–60 months: 0–24m recumbent length, 24m+ standing height). Percentile bands are informational only — consult a pediatrician or EPI health worker (16263) for growth concerns.',
+};

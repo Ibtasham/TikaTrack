@@ -34,6 +34,8 @@ import * as dashboard from './dictionaries/dashboard.en';
 import * as dashboardBn from './dictionaries/dashboard.bn';
 import * as footer from './dictionaries/footer.en';
 import * as footerBn from './dictionaries/footer.bn';
+import * as growth from './dictionaries/growth.en';
+import * as growthBn from './dictionaries/growth.bn';
 import * as home from './dictionaries/home.en';
 import * as homeBn from './dictionaries/home.bn';
 import * as nav from './dictionaries/nav.en';
@@ -91,6 +93,7 @@ const english: TranslationDictionary = mergeAll(
   auth.en,
   about.en,
   footer.en,
+  growth.en,
   confirm.en,
   error.en,
   notFound.en,
@@ -117,6 +120,7 @@ const bangla: TranslationDictionary = mergeAll(
   authBn.bn,
   aboutBn.bn,
   footerBn.bn,
+  growthBn.bn,
   confirmBn.bn,
   errorBn.bn,
   notFoundBn.bn,

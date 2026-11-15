@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { PageSkeleton } from './components/Skeleton';
@@ -34,6 +34,14 @@ const routerBasename = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
  * down with it.
  */
 export default function App() {
+  const [mapsQuotaReached, setMapsQuotaReached] = useState(false);
+
+  useEffect(() => {
+    const onQuotaExceeded = () => setMapsQuotaReached(true);
+    window.addEventListener('gmp-quota-exceeded', onQuotaExceeded);
+    return () => window.removeEventListener('gmp-quota-exceeded', onQuotaExceeded);
+  }, []);
+
   return (
     <BrowserRouter basename={routerBasename}>
       <ThemeProvider>
@@ -41,6 +49,25 @@ export default function App() {
           <ToastProvider>
             <AuthProvider>
               <ProfilesProvider>
+                {mapsQuotaReached && (
+                  <div
+                    role="status"
+                    className="sticky top-0 z-50 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-xs text-amber-900 shadow-sm md:text-sm dark:border-amber-800 dark:bg-amber-950/90 dark:text-amber-100"
+                  >
+                    <span>
+                      Google Maps Platform quota reached. If you are the app owner, visit{' '}
+                      <a
+                        href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-amber-950 underline hover:text-amber-800 dark:text-amber-200 dark:hover:text-amber-100"
+                      >
+                        maps developer site
+                      </a>{' '}
+                      for instructions to update your account.
+                    </span>
+                  </div>
+                )}
                 <Suspense fallback={<PageSkeleton />}>
                   <AppRoutes />
                 </Suspense>

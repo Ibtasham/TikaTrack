@@ -26,6 +26,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { ChildGrowthChart } from '../components/ChildGrowthChart';
 import { PageSkeleton } from '../components/Skeleton';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
@@ -505,6 +506,13 @@ export default function AnalyticsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* --- Child Growth & WHO Standards ------------------------------- */}
+        <div className="mt-5">
+          <ChildGrowthChart
+            preferredProfileId={memberFilter !== 'all' ? memberFilter : undefined}
+          />
         </div>
 
         {/* --- Per-member table ------------------------------------------- */}

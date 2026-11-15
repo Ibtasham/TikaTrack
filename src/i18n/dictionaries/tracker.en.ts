@@ -230,4 +230,5 @@ export const en: TranslationDictionary = {
   'tracker.care.urgentTitle': 'Seek medical care or call 16263 immediately if',
   'tracker.care.urgentBody':
     'Fever goes above 39°C (102°F), inconsolable crying lasts 3+ hours, breathing becomes difficult, face or lips swell, or seizures / sudden limpness occur.',
+  'tracker.growth': 'Growth & WHO',
 };

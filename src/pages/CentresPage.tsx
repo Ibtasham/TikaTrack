@@ -3,13 +3,17 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  Columns2,
   Copy,
   Download,
   ExternalLink,
+  List,
   Loader2,
   LocateFixed,
   Mail,
+  Map as MapIcon,
   MapPin,
+  Navigation,
   Phone,
   Search,
   ShieldCheck,
@@ -17,12 +21,19 @@ import {
   X,
 } from 'lucide-react';
 
+import { CentresMap } from '../components/CentresMap';
 import { useDebouncedValue } from '../hooks';
 import { useI18n } from '../i18n';
 import { useToast } from '../contexts/ToastContext';
 import { allVaccinationCentres, type VaccinationCentre } from '../data/vaccinationCentres';
 import { copyToClipboard, downloadCSV } from '../lib/exporters';
 import { formatDistanceKm, haversineDistanceKm, type Coordinates } from '../lib/geo';
+import {
+  getGoogleMapsApiKey,
+  type RouteOrigin,
+  type RouteSummary,
+  type TravelModeKey,
+} from '../lib/googleMaps';
 
 const TYPES = ['government', 'private', 'ngo', 'hospital'] as const;
 type CentreType = (typeof TYPES)[number];
@@ -35,6 +46,7 @@ const TYPE_ICONS: Record<CentreType, typeof Building2> = {
 };
 
 type SortKey = 'name' | 'district' | 'type' | 'distance';
+type ViewMode = 'split' | 'map' | 'list';
 
 const BASE_SORT_KEYS: SortKey[] = ['name', 'district', 'type'];
 
@@ -52,17 +64,16 @@ function telHref(phone: string): string {
 }
 
 /**
- * `/centres` — the centre finder.
- *
- * Filtering is a single pass where the free-text query is AND-ed with the
- * division, district, type and verified switches. The original app applied the
- * query *instead of* the dropdowns, so picking "Khulna" and then typing a name
- * silently searched the whole country again.
+ * `/centres` — the centre finder with interactive Google Maps, Places
+ * Autocomplete neighbourhood search, nearby hospital discovery, and Routes API
+ * ETA calculation alongside offline filtering & CSV export.
  */
 export default function CentresPage() {
   const { t, language } = useI18n();
   const toast = useToast();
   const isBangla = language === 'bn';
+
+  const mapsApiKey = useMemo(() => getGoogleMapsApiKey(), []);
 
   const [query, setQuery] = useState('');
   const [division, setDivision] = useState('all');
@@ -71,9 +82,29 @@ export default function CentresPage() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>('name');
   const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+  const [areaOrigin, setAreaOrigin] = useState<RouteOrigin | null>(null);
   const [locating, setLocating] = useState(false);
 
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [selectedCentreId, setSelectedCentreId] = useState<string | null>(null);
+  const [focusTrigger, setFocusTrigger] = useState(0);
+  const [routeTarget, setRouteTarget] = useState<VaccinationCentre | null>(null);
+  const [travelMode, setTravelMode] = useState<TravelModeKey>('DRIVING');
+  const [routeSummary, setRouteSummary] = useState<RouteSummary | null>(null);
+
   const debouncedQuery = useDebouncedValue(query, 200);
+
+  // Unified distance/route origin: live GPS location takes precedence if enabled, otherwise selected Google Place area.
+  const activeOrigin: RouteOrigin | null = useMemo(() => {
+    if (userCoords) {
+      return {
+        coords: userCoords,
+        label: t('centres.map.userLocation'),
+        kind: 'gps',
+      };
+    }
+    return areaOrigin;
+  }, [userCoords, areaOrigin, t]);
 
   const divisions = useMemo(
     () =>
@@ -82,10 +113,10 @@ export default function CentresPage() {
   );
 
   const divisionCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+    const counts: Record<string, number> = {};
     for (const centre of allVaccinationCentres) {
       if (!centre.division) continue;
-      counts.set(centre.division, (counts.get(centre.division) ?? 0) + 1);
+      counts[centre.division] = (counts[centre.division] ?? 0) + 1;
     }
     return counts;
   }, []);
@@ -122,13 +153,13 @@ export default function CentresPage() {
     const withDistance = filtered.map((centre) => ({
       centre,
       distanceKm:
-        userCoords && centre.coordinates
-          ? haversineDistanceKm(userCoords, centre.coordinates)
+        activeOrigin && centre.coordinates
+          ? haversineDistanceKm(activeOrigin.coords, centre.coordinates)
           : null,
     }));
 
     return withDistance.sort((a, b) => {
-      if (sort === 'distance' && userCoords) {
+      if (sort === 'distance' && activeOrigin) {
         const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
         const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
         if (da !== db) return da - db;
@@ -143,7 +174,7 @@ export default function CentresPage() {
       }
       return collator.compare(a.centre.name[language], b.centre.name[language]);
     });
-  }, [debouncedQuery, division, district, language, sort, type, userCoords, verifiedOnly]);
+  }, [activeOrigin, debouncedQuery, division, district, language, sort, type, verifiedOnly]);
 
   const activeFilters =
     (division !== 'all' ? 1 : 0) +
@@ -158,7 +189,7 @@ export default function CentresPage() {
     setDistrict('all');
     setType('all');
     setVerifiedOnly(false);
-    setSort(userCoords ? 'distance' : 'name');
+    setSort(activeOrigin ? 'distance' : 'name');
   };
 
   const handleUseLocation = () => {
@@ -184,7 +215,52 @@ export default function CentresPage() {
 
   const handleClearLocation = () => {
     setUserCoords(null);
-    if (sort === 'distance') setSort('name');
+    if (!areaOrigin && sort === 'distance') {
+      setSort('name');
+    }
+  };
+
+  const handleAreaOriginSelect = (origin: RouteOrigin | null) => {
+    setAreaOrigin(origin);
+    if (origin) {
+      setUserCoords(null);
+      setSort('distance');
+    } else if (!userCoords && sort === 'distance') {
+      setSort('name');
+    }
+  };
+
+  const handleFocusOnMap = (centre: VaccinationCentre) => {
+    if (!centre.coordinates) {
+      toast.info(t('centres.map.noCoords', centre.name[language] || centre.name.en));
+      return;
+    }
+    if (viewMode === 'list') {
+      setViewMode('split');
+    }
+    setSelectedCentreId(centre.id);
+    setFocusTrigger((prev) => prev + 1);
+  };
+
+  const handleRequestRoute = (centre: VaccinationCentre) => {
+    if (!centre.coordinates) {
+      toast.info(t('centres.map.noCoords', centre.name[language] || centre.name.en));
+      return;
+    }
+    if (viewMode === 'list') {
+      setViewMode('split');
+    }
+    setSelectedCentreId(centre.id);
+    setFocusTrigger((prev) => prev + 1);
+    setRouteTarget(centre);
+    if (!activeOrigin) {
+      toast.info(t('centres.map.routeNoOrigin'));
+    }
+  };
+
+  const handleClearRoute = () => {
+    setRouteTarget(null);
+    setRouteSummary(null);
   };
 
   const handleExport = () => {
@@ -222,23 +298,58 @@ export default function CentresPage() {
     else toast.error(t('common.status.error'));
   };
 
+  const showMapSection = viewMode === 'split' || viewMode === 'map';
+  const showListSection = viewMode === 'split' || viewMode === 'list';
+
   return (
     <div className="page-shell">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <MapPin className="h-4 w-4" aria-hidden="true" />
-          {t('nav.centres')}
-        </p>
-        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
-          {t('centres.title')}
-        </h1>
-        <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
-          {t('centres.subtitle')}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
+            <MapPin className="h-4 w-4" aria-hidden="true" />
+            {t('nav.centres')}
+          </p>
+          <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
+            {t('centres.title')}
+          </h1>
+          <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
+            {t('centres.subtitle')}
+          </p>
+        </div>
+
+        {/* View Mode Switcher */}
+        <div
+          role="group"
+          aria-label={t('centres.map.heading')}
+          className="no-print inline-flex rounded-xl border border-neutral-200 bg-white p-1 shadow-xs dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          {(
+            [
+              { id: 'split', icon: Columns2, label: t('centres.view.split') },
+              { id: 'map', icon: MapIcon, label: t('centres.view.map') },
+              { id: 'list', icon: List, label: t('centres.view.list') },
+            ] as const
+          ).map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setViewMode(id)}
+              aria-pressed={viewMode === id}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                viewMode === id
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
       </header>
 
       {/* --- Controls ------------------------------------------------------ */}
-      <div className="card-padded mt-8 no-print">
+      <div className="card-padded mt-6 no-print">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
           <div>
             <label className="sr-only" htmlFor="centre-search">
@@ -332,7 +443,7 @@ export default function CentresPage() {
               value={sort}
               onChange={(event) => setSort(event.target.value as SortKey)}
             >
-              {(userCoords ? (['distance', ...BASE_SORT_KEYS] as SortKey[]) : BASE_SORT_KEYS).map(
+              {(activeOrigin ? (['distance', ...BASE_SORT_KEYS] as SortKey[]) : BASE_SORT_KEYS).map(
                 (value) => (
                   <option key={value} value={value}>
                     {t(`centres.sort.${value}`)}
@@ -373,7 +484,7 @@ export default function CentresPage() {
                   : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200'
               }`}
             >
-              {div} ({divisionCounts.get(div) ?? 0})
+              {div} ({divisionCounts[div] ?? 0})
             </button>
           ))}
         </div>
@@ -402,6 +513,21 @@ export default function CentresPage() {
               <X className="h-3.5 w-3.5" aria-hidden="true" />
               {t('centres.locationClear')}
             </button>
+          )}
+
+          {areaOrigin && !userCoords && (
+            <span className="badge-done">
+              <MapPin className="h-3 w-3" aria-hidden="true" />
+              {t('centres.areaSearch.originBadge', areaOrigin.label)}
+              <button
+                type="button"
+                className="ml-1 rounded hover:text-emerald-950 dark:hover:text-white"
+                onClick={() => handleAreaOriginSelect(null)}
+                aria-label={t('centres.areaSearch.clearOrigin')}
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
           )}
 
           <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
@@ -439,168 +565,249 @@ export default function CentresPage() {
         <span className={isBangla ? 'font-bangla' : undefined}>{t('centres.disclaimer')}</span>
       </p>
 
-      {/* --- Results ------------------------------------------------------- */}
-      {results.length === 0 ? (
-        <div className="card-padded mt-6 text-center">
-          <p className={`text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
-            {t('centres.noData')}
-          </p>
-          <a href="tel:16263" className="btn-primary mt-4">
-            <Phone className="h-4 w-4" aria-hidden="true" />
-            {t('centres.callHelpline')}: 16263
-          </a>
-          <button type="button" className="btn-ghost mt-2" onClick={clearFilters}>
-            {t('vaccines.clearFilters')}
-          </button>
-        </div>
-      ) : (
-        <ul className="mt-6 grid gap-4 lg:grid-cols-2">
-          {results.map(({ centre, distanceKm }) => {
-            const Icon = TYPE_ICONS[centre.type] ?? Building2;
-            return (
-              <li key={centre.id} className="card-padded flex flex-col gap-3">
-                <div className="flex items-start gap-3">
-                  <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                    aria-hidden="true"
-                  >
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2
-                      className={`font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+      {/* --- Map + Directory Layout ---------------------------------------- */}
+      <div
+        className={`mt-6 grid gap-6 ${
+          showMapSection && showListSection && mapsApiKey
+            ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] xl:items-start'
+            : 'grid-cols-1'
+        }`}
+      >
+        {showMapSection && (
+          <div
+            className={`no-print ${
+              showListSection && mapsApiKey ? 'xl:order-2 xl:sticky xl:top-20' : ''
+            }`}
+          >
+            <CentresMap
+              apiKey={mapsApiKey}
+              centres={results}
+              activeOrigin={activeOrigin}
+              selectedCentreId={selectedCentreId}
+              focusTrigger={focusTrigger}
+              routeTarget={routeTarget}
+              travelMode={travelMode}
+              routeSummary={routeSummary}
+              onSelectCentre={setSelectedCentreId}
+              onAreaOriginSelect={handleAreaOriginSelect}
+              onRequestRoute={handleRequestRoute}
+              onClearRoute={handleClearRoute}
+              onTravelModeChange={setTravelMode}
+              onRouteSummaryChange={setRouteSummary}
+            />
+          </div>
+        )}
+
+        {showListSection && (
+          <div className={showMapSection && mapsApiKey ? 'xl:order-1' : undefined}>
+            {results.length === 0 ? (
+              <div className="card-padded text-center">
+                <p
+                  className={`text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {t('centres.noData')}
+                </p>
+                <a href="tel:16263" className="btn-primary mt-4">
+                  <Phone className="h-4 w-4" aria-hidden="true" />
+                  {t('centres.callHelpline')}: 16263
+                </a>
+                <button type="button" className="btn-ghost mt-2" onClick={clearFilters}>
+                  {t('vaccines.clearFilters')}
+                </button>
+              </div>
+            ) : (
+              <ul
+                className={`grid gap-4 ${
+                  viewMode === 'split' && mapsApiKey ? 'grid-cols-1' : 'lg:grid-cols-2'
+                }`}
+              >
+                {results.map(({ centre, distanceKm }) => {
+                  const Icon = TYPE_ICONS[centre.type] ?? Building2;
+                  const isSelected = selectedCentreId === centre.id;
+                  const activeRouteForCard =
+                    routeSummary && routeSummary.centreId === centre.id ? routeSummary : null;
+                  return (
+                    <li
+                      key={centre.id}
+                      className={`card-padded flex flex-col gap-3 transition-shadow ${
+                        isSelected ? 'ring-2 ring-emerald-500 dark:ring-emerald-400' : ''
+                      }`}
                     >
-                      {centre.name[language] || centre.name.en}
-                    </h2>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      <span className="badge-neutral">{t(`centres.type.${centre.type}`)}</span>
-                      <span>
-                        {centre.district} · {centre.division}
-                      </span>
-                      {distanceKm !== null && (
-                        <span className="badge-upcoming tabular-nums">
-                          {t('centres.away', formatDistanceKm(distanceKm, language))}
-                        </span>
-                      )}
-                      {centre.verified ? (
-                        <span className="badge-done">
-                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                          {t('centres.verified')}
-                        </span>
-                      ) : (
-                        <span className="badge-due">{t('centres.unverified')}</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <address className="flex items-start gap-2 text-sm not-italic text-neutral-600 dark:text-neutral-300">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-                  <span className={isBangla ? 'font-bangla' : undefined}>
-                    {centre.address[language] || centre.address.en}
-                  </span>
-                </address>
-
-                {centre.phone.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Phone className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-                    {centre.phone.map((phone) => (
-                      <span key={phone} className="flex items-center gap-1">
-                        <a className="link text-sm" href={telHref(phone)}>
-                          {phone}
-                        </a>
-                        <button
-                          type="button"
-                          className="text-neutral-400 transition-colors hover:text-emerald-600"
-                          onClick={() => void handleCopyPhone(phone)}
-                          aria-label={`${t('centres.copyPhone')}: ${phone}`}
-                          title={t('centres.copyPhone')}
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          aria-hidden="true"
                         >
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h2
+                            className={`font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                          >
+                            {centre.name[language] || centre.name.en}
+                          </h2>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                            <span className="badge-neutral">{t(`centres.type.${centre.type}`)}</span>
+                            <span>
+                              {centre.district} · {centre.division}
+                            </span>
+                            {distanceKm !== null && (
+                              <span className="badge-upcoming tabular-nums">
+                                {t('centres.away', formatDistanceKm(distanceKm, language))}
+                              </span>
+                            )}
+                            {activeRouteForCard && (
+                              <span className="badge-done tabular-nums">
+                                <Navigation className="h-3 w-3" aria-hidden="true" />
+                                {activeRouteForCard.durationText} ·{' '}
+                                {activeRouteForCard.distanceText}
+                              </span>
+                            )}
+                            {centre.verified ? (
+                              <span className="badge-done">
+                                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                {t('centres.verified')}
+                              </span>
+                            ) : (
+                              <span className="badge-due">{t('centres.unverified')}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
 
-                {centre.hotline && (
-                  <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                    <Phone className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {t('centres.hotline')}:
-                    </span>
-                    <a className="link" href={telHref(centre.hotline)}>
-                      {centre.hotline}
-                    </a>
-                  </p>
-                )}
+                      <address className="flex items-start gap-2 text-sm not-italic text-neutral-600 dark:text-neutral-300">
+                        <MapPin
+                          className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
+                          aria-hidden="true"
+                        />
+                        <span className={isBangla ? 'font-bangla' : undefined}>
+                          {centre.address[language] || centre.address.en}
+                        </span>
+                      </address>
 
-                {centre.workingHours && (
-                  <p className="flex items-start gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                    <Clock
-                      className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
-                      aria-hidden="true"
-                    />
-                    <span className={isBangla ? 'font-bangla' : undefined}>
-                      {centre.workingHours[language] || centre.workingHours.en}
-                    </span>
-                  </p>
-                )}
+                      {centre.phone.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Phone className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                          {centre.phone.map((phone) => (
+                            <span key={phone} className="flex items-center gap-1">
+                              <a className="link text-sm" href={telHref(phone)}>
+                                {phone}
+                              </a>
+                              <button
+                                type="button"
+                                className="text-neutral-400 transition-colors hover:text-emerald-600"
+                                onClick={() => void handleCopyPhone(phone)}
+                                aria-label={`${t('centres.copyPhone')}: ${phone}`}
+                                title={t('centres.copyPhone')}
+                              >
+                                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
-                {centre.email && (
-                  <p className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-                    <a className="link break-all" href={`mailto:${centre.email}`}>
-                      {centre.email}
-                    </a>
-                  </p>
-                )}
+                      {centre.hotline && (
+                        <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                          <Phone className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {t('centres.hotline')}:
+                          </span>
+                          <a className="link" href={telHref(centre.hotline)}>
+                            {centre.hotline}
+                          </a>
+                        </p>
+                      )}
 
-                {centre.services.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                      {t('centres.services')}
-                    </p>
-                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                      {centre.services.map((service) => (
-                        <li key={service} className="badge-neutral">
-                          {service}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                      {centre.workingHours && (
+                        <p className="flex items-start gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                          <Clock
+                            className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
+                            aria-hidden="true"
+                          />
+                          <span className={isBangla ? 'font-bangla' : undefined}>
+                            {centre.workingHours[language] || centre.workingHours.en}
+                          </span>
+                        </p>
+                      )}
 
-                <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
-                  <a
-                    className="btn-secondary btn-sm"
-                    href={mapsUrl(centre, language)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('centres.openMaps')}
-                  </a>
-                  {centre.website && (
-                    <a
-                      className="btn-ghost btn-sm"
-                      href={centre.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {t('vaccines.detail.viewSource')}
-                    </a>
-                  )}
-                  <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
-                    {t('centres.source')}: {centre.source}
-                    {centre.lastUpdated && ` · ${centre.lastUpdated}`}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                      {centre.email && (
+                        <p className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                          <a className="link break-all" href={`mailto:${centre.email}`}>
+                            {centre.email}
+                          </a>
+                        </p>
+                      )}
+
+                      {centre.services.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                            {t('centres.services')}
+                          </p>
+                          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                            {centre.services.map((service) => (
+                              <li key={service} className="badge-neutral">
+                                {service}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                        {mapsApiKey && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                              onClick={() => handleFocusOnMap(centre)}
+                            >
+                              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                              {t('centres.map.focus')}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm whitespace-nowrap shrink-0"
+                              onClick={() => handleRequestRoute(centre)}
+                            >
+                              <Navigation className="h-3.5 w-3.5" aria-hidden="true" />
+                              {t('centres.map.getRoute')}
+                            </button>
+                          </>
+                        )}
+                        <a
+                          className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                          href={mapsUrl(centre, language)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          {t('centres.openMaps')}
+                        </a>
+                        {centre.website && (
+                          <a
+                            className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                            href={centre.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {t('vaccines.detail.viewSource')}
+                          </a>
+                        )}
+                        <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
+                          {t('centres.source')}: {centre.source}
+                          {centre.lastUpdated && ` · ${centre.lastUpdated}`}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   Phone,
   Stethoscope,
 } from 'lucide-react';
+import { ChildGrowthChart } from './ChildGrowthChart';
 import { DoseHistory } from './DoseHistory';
 import { DoseRecorder } from './DoseRecorder';
 import { MemberActions } from './MemberActions';
@@ -86,7 +87,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
   const [editGender, setEditGender] = useState<ProfileGender>('female');
 
   // View & preferences state
-  const [viewMode, setViewMode] = useState<'overview' | 'timeline' | 'reminders' | 'catchup'>(
+  const [viewMode, setViewMode] = useState<'overview' | 'timeline' | 'growth' | 'reminders' | 'catchup'>(
     'overview',
   );
   const [preferences, setPreferences] = useState<ReminderPreferences>(loadReminderPreferences());
@@ -618,7 +619,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       {/* View Mode Selector */}
       {profiles.length > 0 && (
         <div className="flex flex-wrap gap-2 no-print">
-          {(['overview', 'timeline', 'reminders', 'catchup'] as const).map((mode) => (
+          {(['overview', 'timeline', 'growth', 'reminders', 'catchup'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -1140,6 +1141,9 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
           )}
         </div>
       )}
+
+      {/* Growth & WHO View */}
+      {viewMode === 'growth' && currentProfile && <ChildGrowthChart profile={currentProfile} />}
 
       {/* Reminders View */}
       {viewMode === 'reminders' && currentProfile && (

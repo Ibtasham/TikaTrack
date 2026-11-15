@@ -136,6 +136,20 @@ export type DoseHistoryInput =
   | undefined
   | null;
 
+/** One physical growth measurement (height and/or weight) recorded for a member. */
+export interface GrowthMeasurement {
+  id: string;
+  /** ISO date (`YYYY-MM-DD`) when the measurement was taken. */
+  date: string;
+  /** Length (0–24m) or standing height (24m+) in centimetres. */
+  heightCm?: number;
+  /** Body weight in kilograms. */
+  weightKg?: number;
+  /** Optional clinic/checkup note. */
+  notes?: string;
+  createdAt: string;
+}
+
 /** One family member being tracked. */
 export interface Profile {
   id: string;
@@ -158,6 +172,8 @@ export interface Profile {
    * it can only ever hold one dose per vaccine.
    */
   records: Record<string, DoseRecord>;
+  /** Chronological child growth log (weight and/or height), oldest first. */
+  growth?: GrowthMeasurement[];
   /** Relationship to the account owner, purely informational. */
   relationship?: 'self' | 'child' | 'spouse' | 'parent' | 'sibling' | 'other';
   /** Optional gender, used only for local statistics. */

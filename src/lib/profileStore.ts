@@ -33,10 +33,19 @@ import {
 } from './doseLedger';
 import { createProfileId } from './id';
 import {
+  buildGrowthMeasurement,
+  mergeGrowthMeasurements,
+  normaliseGrowthMeasurement,
+  sortGrowthMeasurements,
+  type GrowthInputError,
+  type NewGrowthInput,
+} from './whoGrowth';
+import {
   EXPORT_APP_ID,
   EXPORT_VERSION,
   PROFILE_RELATIONSHIPS,
   type DoseRecord,
+  type GrowthMeasurement,
   type Profile,
   type ProfileRelationship,
   type TikaTrackExport,
@@ -128,6 +137,15 @@ export function normaliseProfile(value: unknown, now?: string): Profile | null {
     profile.events = sortEvents(events);
   }
 
+  if (Array.isArray(candidate.growth)) {
+    const growth = sortGrowthMeasurements(
+      candidate.growth
+        .map((raw) => normaliseGrowthMeasurement(raw, now))
+        .filter((entry): entry is GrowthMeasurement => entry !== null),
+    );
+    if (growth.length > 0) profile.growth = growth;
+  }
+
   const relationship = normaliseRelationship(candidate.relationship);
   if (relationship) profile.relationship = relationship;
   if (
@@ -197,11 +215,14 @@ export function mergeProfilePair(existing: Profile, incoming: Profile, now?: str
   );
   const base = incomingIsNewer ? incoming : existing;
 
+  const mergedGrowth = mergeGrowthMeasurements(existing.growth ?? [], incoming.growth ?? []);
+
   const profile: Profile = {
     ...base,
     id: existing.id,
     events: merged.events,
     records: legacyProjection(merged.events),
+    ...(mergedGrowth.length > 0 ? { growth: mergedGrowth } : {}),
     relationship: existing.relationship ?? incoming.relationship,
     gender: existing.gender ?? incoming.gender,
     createdAt: existing.createdAt ?? incoming.createdAt,
@@ -432,6 +453,48 @@ export function resolveDoseReview(
   return updateDoseEvent(profiles, profileId, eventId, { doseNumber }, now);
 }
 
+export type AddGrowthResult = {
+  profiles: Profile[];
+  measurement?: GrowthMeasurement;
+  error?: GrowthInputError;
+};
+
+/** Append one validated height/weight measurement to a member's growth log. */
+export function addGrowthMeasurement(
+  profiles: Profile[],
+  profileId: string,
+  input: NewGrowthInput,
+  now = new Date().toISOString(),
+): AddGrowthResult {
+  const target = profiles.find((profile) => profile.id === profileId);
+  if (!target) return { profiles, error: 'missing-date' };
+
+  const built = buildGrowthMeasurement(target.dateOfBirth, input, now);
+  if (!built.measurement) return { profiles, error: built.error };
+
+  const entry = built.measurement;
+  const next = profiles.map((profile) => {
+    if (profile.id !== profileId) return profile;
+    const growth = sortGrowthMeasurements([...(profile.growth ?? []), entry]);
+    return { ...profile, growth, updatedAt: now };
+  });
+  return { profiles: next, measurement: entry };
+}
+
+/** Delete one growth measurement by id. */
+export function removeGrowthMeasurement(
+  profiles: Profile[],
+  profileId: string,
+  measurementId: string,
+  now = new Date().toISOString(),
+): Profile[] {
+  return profiles.map((profile) => {
+    if (profile.id !== profileId) return profile;
+    const growth = (profile.growth ?? []).filter((item) => item.id !== measurementId);
+    return { ...profile, growth, updatedAt: now };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
@@ -568,6 +631,8 @@ export function mergeImport(
     dosesUpdated += doseMerge.updated;
     dosesSkipped += doseMerge.skipped;
 
+    const mergedGrowth = mergeGrowthMeasurements(existing.growth ?? [], profile.growth ?? []);
+
     byId.set(
       profile.id,
       withLedger(
@@ -577,6 +642,7 @@ export function mergeImport(
           id: existing.id,
           events: doseMerge.events,
           records: legacyProjection(doseMerge.events),
+          ...(mergedGrowth.length > 0 ? { growth: mergedGrowth } : {}),
           createdAt: existing.createdAt ?? profile.createdAt,
           ledgerMigratedAt: existing.ledgerMigratedAt ?? profile.ledgerMigratedAt,
           updatedAt: now,
