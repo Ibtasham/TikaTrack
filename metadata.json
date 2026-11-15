@@ -1,0 +1,6 @@
+{
+  "name": "TikaTrack",
+  "description": "Bilingual (English / বাংলা) vaccination platform for Bangladesh with official EPI schedules, dose-level family tracking, verified centres, digital QR passport, and an offline assistant.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" class="light" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>TikaTrack — Never Miss a Vaccine | কখনো টিকা বাদ পড়বে না</title>
+    <meta
+      name="description"
+      content="Bilingual (English / বাংলা) vaccination platform for Bangladesh with official EPI schedules, dose-level family tracking, verified centres, digital QR passport, and an offline assistant."
+    />
+    <meta name="author" content="TikaTrack" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#059669" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1f1a" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Open Graph / social sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TikaTrack" />
+    <meta property="og:title" content="TikaTrack — Never Miss a Vaccine | কখনো টিকা বাদ পড়বে না" />
+    <meta
+      property="og:description"
+      content="Bilingual (English / বাংলা) vaccination platform for Bangladesh with official EPI schedules, dose-level family tracking, verified centres, digital QR passport, and an offline assistant."
+    />
+    <meta property="og:image" content="/icons/og-cover.png" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="bn_BD" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TikaTrack — Never Miss a Vaccine" />
+    <meta
+      name="twitter:description"
+      content="Source-backed vaccination schedules, family tracking and centre finder for Bangladesh."
+    />
+    <meta name="twitter:image" content="/icons/og-cover.png" />
+
+    <!-- Installable / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TikaTrack" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <script>
+      // Apply the saved theme + language before first paint to avoid a flash.
+      (function () {
+        try {
+          var root = document.documentElement;
+          var stored = localStorage.getItem('tikatrack.theme');
+          var prefersDark =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme =
+            stored === 'light' || stored === 'dark' ? stored : prefersDark ? 'dark' : 'light';
+          root.classList.remove('light', 'dark');
+          root.classList.add(theme);
+          root.setAttribute('data-theme', theme);
+          var textSize = localStorage.getItem('tikatrack.textSize');
+          if (textSize === 'large' || textSize === 'xlarge') {
+            root.setAttribute('data-text-size', textSize);
+          }
+          var lang = localStorage.getItem('tikatrack.language');
+          if (lang === 'en' || lang === 'bn') {
+            root.setAttribute('lang', lang);
+          }
+        } catch (e) {
+          /* storage blocked (private mode) — fall back to light */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif; line-height: 1.6">
+        <h1>TikaTrack requires JavaScript</h1>
+        <p>
+          TikaTrack is an interactive vaccination planner, so it needs JavaScript enabled in your
+          browser. If you only need the national immunisation schedule, call the Bangladesh health
+          hotline on <a href="tel:16263">16263</a> or visit
+          <a href="https://dghs.gov.bd" rel="noopener">dghs.gov.bd</a>.
+        </p>
+        <p>
+          টিকাট্র্যাক ব্যবহার করতে আপনার ব্রাউজারে JavaScript সক্রিয় থাকতে হবে। জাতীয় স্বাস্থ্য
+          হটলাইন: <a href="tel:16263">১৬২৬৩</a>।
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

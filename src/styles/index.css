@@ -1,0 +1,442 @@
+@import 'tailwindcss';
+
+/*
+ * TikaTrack's theme is class-driven: `ThemeProvider` puts `light` or `dark` on
+ * <html>. Tailwind v4 defaults to a *media-query* dark variant, so without this
+ * line every `dark:` utility in the codebase would silently never apply.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+ * Design tokens
+ *
+ * Only the shades the app actually uses are declared. Tailwind v4 still ships
+ * its full default palette, so `bg-emerald-400` etc. keep working — these
+ * entries exist to pin the brand colours and to add the two custom surfaces.
+ * ------------------------------------------------------------------------- */
+@theme {
+  /* Brand — emerald/teal ramp used by buttons, links and the vaccine cards. */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+  --color-brand-950: #022c22;
+
+  /* Surfaces. */
+  --color-surface: #fefdfb;
+  --color-surface-dark: #0b1f1a;
+  --color-ink: #171717;
+  --color-ink-dark: #f5f5f5;
+
+  /* Status colours shared by the dashboard, tracker and analytics. */
+  --color-status-due: #d97706;
+  --color-status-overdue: #dc2626;
+  --color-status-done: #059669;
+  --color-status-upcoming: #2563eb;
+
+  /*
+   * Fonts.
+   *
+   * TikaTrack deliberately does NOT fetch web fonts: Bangladeshi mobile
+   * connections are often metered, and a vaccination reference should render
+   * instantly offline. These stacks prefer an installed Bangla face and fall
+   * back to the platform UI font. See docs/LOCALISATION.md for how to opt into
+   * a self-hosted web font.
+   */
+  --font-sans:
+    'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-bangla:
+    'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Kalpurush', 'Shonar Bangla',
+    'Nirmala UI', var(--font-sans);
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  --radius-card: 0.875rem;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px -12px rgb(15 23 42 / 0.18);
+  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.08), 0 16px 40px -16px rgb(15 23 42 / 0.28);
+}
+
+/* ---------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    /* Keep the sticky header from covering anchor targets. */
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /*
+   * Text size is a user preference, not a zoom level: scaling the root font
+   * size keeps every rem-based utility (spacing included) in proportion, and
+   * survives a reload because index.html applies it before first paint.
+   */
+  :root[data-text-size='large'] {
+    font-size: 106.25%;
+  }
+
+  :root[data-text-size='xlarge'] {
+    font-size: 118.75%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-surface-dark dark:text-ink-dark;
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Any element rendering Bangla gets a face with proper conjunct shaping. */
+  .font-bangla,
+  [lang='bn'] {
+    font-family: var(--font-bangla);
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-emerald-600 dark:outline-emerald-400;
+  }
+
+  /* Form controls need explicit dark styling — browsers do not inherit it. */
+  input,
+  select,
+  textarea {
+    @apply dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-neutral-400 dark:text-neutral-500;
+  }
+
+  /* Tables inside cards should scroll rather than break the layout on phones. */
+  .table-scroll {
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Components
+ *
+ * These are the only class names pages should reach for, so a redesign is a
+ * one-file change.
+ * ------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+ * Composable bases.
+ *
+ * Tailwind v4 only lets `@apply` reference *utilities* — not classes defined in
+ * `@layer components`. These four are the bases other component classes build
+ * on, so they are registered with `@utility` (which also keeps them usable
+ * directly in markup). `card-padded` inlines `card` rather than applying it,
+ * because a custom utility may not `@apply` another custom utility.
+ * ------------------------------------------------------------------------- */
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all;
+  @apply disabled:pointer-events-none disabled:opacity-50;
+}
+
+@utility card {
+  @apply rounded-[var(--radius-card)] border border-neutral-200/80 bg-white shadow-[var(--shadow-card)];
+  @apply dark:border-neutral-800 dark:bg-neutral-900;
+}
+
+@utility card-padded {
+  @apply rounded-[var(--radius-card)] border border-neutral-200/80 bg-white shadow-[var(--shadow-card)];
+  @apply dark:border-neutral-800 dark:bg-neutral-900;
+  @apply p-5 sm:p-6;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+
+@layer components {
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md;
+    @apply hover:shadow-lg hover:brightness-110 active:brightness-95;
+  }
+
+  .btn-secondary {
+    @apply btn border-2 border-emerald-200 bg-white text-emerald-700;
+    @apply hover:border-emerald-300 hover:bg-emerald-50;
+    @apply dark:border-emerald-900 dark:bg-neutral-900 dark:text-emerald-300 dark:hover:bg-neutral-800;
+  }
+
+  .btn-ghost {
+    @apply btn text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900;
+    @apply dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white shadow-md hover:bg-red-700;
+    @apply dark:bg-red-700 dark:hover:bg-red-600;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .card-hover {
+    @apply card transition-shadow hover:shadow-[var(--shadow-card-hover)];
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm;
+    @apply transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none;
+    @apply dark:border-neutral-700 dark:bg-neutral-900;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300;
+  }
+
+  .badge-done {
+    @apply badge bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300;
+  }
+
+  .badge-due {
+    @apply badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300;
+  }
+
+  .badge-overdue {
+    @apply badge bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300;
+  }
+
+  .badge-upcoming {
+    @apply badge bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300;
+  }
+
+  .badge-neutral {
+    @apply badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white;
+  }
+
+  .section-subtitle {
+    @apply mt-2 max-w-2xl text-base text-neutral-600 dark:text-neutral-400;
+  }
+
+  .page-shell {
+    @apply mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8;
+  }
+
+  .link {
+    @apply font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400;
+  }
+
+  /* A link that behaves as a button (mode switches, "view all" toggles). */
+  .btn-link {
+    @apply cursor-pointer rounded font-medium text-emerald-700 underline-offset-2 transition-colors;
+    @apply hover:text-emerald-800 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300;
+  }
+
+  /* Small pill toggle — reminder lead times, filter tags. */
+  .chip {
+    @apply inline-flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Stat cards: the number-first summary rows on the dashboard pages. */
+  .stat-grid {
+    @apply grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4;
+  }
+
+  .stat-card {
+    @apply card-padded flex flex-col gap-1;
+  }
+
+  .stat-label {
+    @apply text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold text-neutral-900 tabular-nums sm:text-3xl dark:text-white;
+  }
+
+  .glass {
+    @apply border border-white/40 bg-white/70 shadow-lg backdrop-blur-xl;
+    @apply dark:border-white/10 dark:bg-neutral-900/70;
+  }
+
+  .sr-only-focusable {
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-100 focus:rounded-lg focus:bg-emerald-600 focus:px-4 focus:py-2 focus:text-white;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Animations
+ * ------------------------------------------------------------------------- */
+@layer utilities {
+  @keyframes tt-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-14px);
+    }
+  }
+
+  @keyframes tt-pulse-soft {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+
+  @keyframes tt-slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes tt-slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes tt-scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes tt-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-float {
+    animation: tt-float 6s ease-in-out infinite;
+  }
+  .animate-float-delayed {
+    animation: tt-float 8s ease-in-out 1s infinite;
+  }
+  .animate-pulse-soft {
+    animation: tt-pulse-soft 3s ease-in-out infinite;
+  }
+  .animate-slide-up {
+    animation: tt-slide-up 0.45s ease-out both;
+  }
+  .animate-slide-in-right {
+    animation: tt-slide-in-right 0.35s ease-out both;
+  }
+  .animate-scale-in {
+    animation: tt-scale-in 0.25s ease-out both;
+  }
+  .animate-fade-in {
+    animation: tt-fade-in 0.3s ease-out both;
+  }
+
+  /* Stagger helper for card grids; the delay scale is small on purpose. */
+  .stagger-1 {
+    animation-delay: 60ms;
+  }
+  .stagger-2 {
+    animation-delay: 120ms;
+  }
+  .stagger-3 {
+    animation-delay: 180ms;
+  }
+  .stagger-4 {
+    animation-delay: 240ms;
+  }
+  .stagger-5 {
+    animation-delay: 300ms;
+  }
+  .stagger-6 {
+    animation-delay: 360ms;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Print
+ *
+ * The schedule, tracker, analytics and passport pages all offer "Print". Only
+ * the marked subtree should reach the paper — headers, nav and controls must
+ * not.
+ * ------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  header,
+  footer,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-area {
+    position: static !important;
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .card,
+  .card-padded,
+  .card-hover {
+    border: 1px solid #d4d4d4 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.75em;
+    color: #525252;
+  }
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<!--
+  SPA fallback for static hosts that cannot rewrite unknown paths to index.html
+  (most notably GitHub Pages, which serves this file for every 404).
+
+  It forwards the original location to the app root as `?tikatrack_route=…`
+  (plus a sessionStorage copy), and `src/lib/spaRedirect.ts` turns that back into
+  a real route before React Router mounts.
+
+  This is a *template*: `{{BASE}}` is replaced with the build's base path by the
+  `tikatrack:spa-fallback` plugin in vite.config.ts, and the result is emitted as
+  `dist/404.html`. The base has to be baked in at build time because this page is
+  served from a path the app never sees, so it cannot work out where the app root
+  is by itself.
+
+  If your host supports rewrites (Netlify, Vercel, Cloudflare Pages, nginx),
+  prefer a proper rewrite rule — see docs/DEPLOYMENT.md.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Redirecting… | TikaTrack</title>
+    <script>
+      (function () {
+        var BASE = '{{BASE}}';
+        var path = window.location.pathname + window.location.search + window.location.hash;
+        var target = window.location.origin + BASE + '?tikatrack_route=' + encodeURIComponent(path);
+        try {
+          window.sessionStorage.setItem('tikatrack.redirect', path);
+        } catch (e) {
+          /* Private browsing can block sessionStorage; the query parameter is enough. */
+        }
+        window.location.replace(target);
+      })();
+    </script>
+  </head>
+  <body>
+    <p style="font-family: system-ui, sans-serif; padding: 2rem">
+      Redirecting you back to TikaTrack…
+    </p>
+  </body>
+</html>

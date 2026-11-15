@@ -1,0 +1,101 @@
+/* ---------------------------------------------------------------------------
+ * English strings.
+ *
+ * Kept in sync with the other language file: `npm run test` fails when a key
+ * exists in one language but not the other.
+ * ------------------------------------------------------------------------- */
+import type { TranslationDictionary } from '../types';
+
+export const en: TranslationDictionary = {
+  'vaccines.title': 'Vaccine Library',
+  'vaccines.subtitle': 'Browse verified vaccine information with source citations',
+  'vaccines.search': 'Search vaccines...',
+  'vaccines.searchPlaceholder': 'Search by vaccine or disease…',
+  'vaccines.filter.category': 'Category',
+  'vaccines.filter.ageGroup': 'Age group',
+  'vaccines.filter.sort': 'Sort by',
+  'vaccines.sort.name': 'Name (A–Z)',
+  'vaccines.sort.category': 'Category',
+  'vaccines.sort.introduced': 'Year introduced',
+  'vaccines.category.routine': 'Routine EPI',
+  'vaccines.category.campaign': 'Campaign',
+  'vaccines.category.special': 'Special group',
+  'vaccines.category.recommended': 'Recommended',
+  'vaccines.category.non_routine': 'Non-routine',
+  'vaccines.count': '{0} vaccines',
+  'vaccines.empty': 'No vaccine matches that search.',
+  'vaccines.clearFilters': 'Clear filters',
+  'vaccines.doses': '{0} doses',
+  'vaccines.efficacy': 'Efficacy',
+  'vaccines.notFound.title': 'Vaccine not found',
+  'vaccines.notFound.body': 'No vaccine has the identifier “{0}”.',
+  'vaccines.detail.disease': 'Protects against',
+  'vaccines.detail.schedule': 'When it is given',
+  'vaccines.detail.ageGroup': 'Age group',
+  'vaccines.detail.introduced': 'Introduced in Bangladesh',
+  'vaccines.detail.doseCount': 'Number of doses',
+  'vaccines.detail.description': 'About this vaccine',
+  'vaccines.detail.diseaseRisk': 'Why it matters',
+  'vaccines.detail.commonEffects': 'Common side effects',
+  'vaccines.detail.seriousEffects': 'Serious side effects',
+  'vaccines.detail.contraindications': 'Who should not take it',
+  'vaccines.detail.source': 'Source',
+  'vaccines.detail.viewSource': 'View the source',
+  'vaccines.detail.compare': 'Add to comparison',
+  'vaccines.detail.compared': 'In comparison',
+  'vaccines.detail.recordDose': 'Record a dose',
+  'vaccines.detail.medicalDisclaimer':
+    'TikaTrack summarises published guidance. It is not medical advice — confirm any decision with a registered health worker.',
+
+  // --- Evidence and provenance (TikaTrack 3.0) -----------------------------
+  'vaccines.evidence.title': 'Evidence and provenance',
+  'vaccines.evidence.subtitle':
+    'Where this information comes from, and how far it has been checked.',
+  'vaccines.evidence.programme': 'Programme classification',
+  'vaccines.evidence.productStatus': 'Product status',
+  'vaccines.evidence.reviewStatus': 'Review status',
+  'vaccines.evidence.lastReviewed': 'Last reviewed',
+  'vaccines.evidence.effectiveFrom': 'Effective from',
+  'vaccines.evidence.notEstablished': 'Not established',
+  'vaccines.evidence.sources': 'Registered sources',
+  'vaccines.evidence.published': 'Published',
+  'vaccines.evidence.accessed': 'Accessed',
+  'vaccines.evidence.noDocumentSource':
+    'No document-level source is registered for this entry. It is carried over from the previous TikaTrack dataset and has not been checked against an official publication.',
+  'vaccines.evidence.reviewBanner':
+    'This entry is awaiting professional review. It is shown for information only — do not use it to decide when a vaccine is due. Confirm with your EPI centre or a registered health worker.',
+  'vaccines.evidence.researchBanner':
+    'No licensed vaccine exists for this disease. It is listed so that research activity is not mistaken for an available vaccine.',
+  'vaccines.evidence.notInProgramme': 'Not part of the Bangladesh national routine programme.',
+  'vaccines.evidence.conflicts': 'Recorded conflicts',
+  'vaccines.evidence.conflictStatus':
+    'Unresolved — both statements are shown; TikaTrack does not choose between them.',
+  'vaccines.evidence.requiredAction': 'Required action',
+  'vaccines.evidence.knowledgeBase': 'Knowledge base {0} · schema {1}',
+  'vaccines.programme.bd-nip-routine': 'Bangladesh national routine (EPI)',
+  'vaccines.programme.bd-national-campaign': 'Bangladesh national campaign',
+  'vaccines.programme.bd-sia': 'Supplementary immunization activity',
+  'vaccines.programme.bd-special-risk': 'Special-risk group',
+  'vaccines.programme.travel': 'Travel vaccination',
+  'vaccines.programme.occupational': 'Occupational vaccination',
+  'vaccines.programme.private-market-bd': 'Private market (Bangladesh)',
+  'vaccines.programme.international-reference': 'International reference schedule',
+  'vaccines.programme.bd-planned-introduction': 'Planned for the national programme',
+  'vaccines.programme.research-not-available': 'Research only — not available',
+  'vaccines.productStatus.licensed-bd': 'Licensed in Bangladesh',
+  'vaccines.productStatus.licensed-elsewhere-only':
+    'Licensed elsewhere; not licensed in Bangladesh',
+  'vaccines.productStatus.not-yet-introduced-bd': 'Not yet introduced in Bangladesh',
+  'vaccines.productStatus.in-development': 'In development — no licensed product',
+  'vaccines.productStatus.discontinued': 'Discontinued',
+  'vaccines.productStatus.unknown': 'Availability not verified',
+  'vaccines.review.requires-professional-review': 'Awaiting professional review',
+  'vaccines.review.legacy-unverified': 'Carried over from the previous dataset; not verified',
+  'vaccines.review.evidence-verified': 'Verified against a registered source',
+  'vaccines.review.metadata-registered': 'Source registered; document not yet reviewed',
+  'vaccines.review.conflict-unresolved': 'Conflicting sources — unresolved',
+  'vaccines.detail.familyStatus': 'Family dose status',
+  'vaccines.detail.dosesGivenOf': '{0} of {1} doses recorded',
+  'vaccines.detail.dosesGivenSingle': '{0} dose(s) recorded',
+  'vaccines.detail.notRecordedYet': 'Not recorded yet',
+};

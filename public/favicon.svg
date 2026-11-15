@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="TikaTrack">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10b981"/>
+      <stop offset="0.55" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 3 7 12v18c0 15 10.6 26.4 25 31 14.4-4.6 25-16 25-31V12L32 3Z" fill="url(#g)"/>
+  <path d="M32 7.6 11.4 15v15c0 12.6 8.7 22.3 20.6 26.5C43.9 52.3 52.6 42.6 52.6 30V15L32 7.6Z" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="1.6"/>
+  <path d="m22.5 32.4 6.6 6.6L43 25.5" fill="none" stroke="#ffffff" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

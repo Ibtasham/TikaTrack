@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Health data lives only in the visitor's own browser, but keep auth out of
+# crawlers regardless.
+Disallow: /auth
+Disallow: /privacy
+Disallow: /passport
+
+Sitemap: /sitemap.xml
