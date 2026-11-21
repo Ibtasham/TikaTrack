@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 
 import { ChildGrowthChart } from '../components/ChildGrowthChart';
+import { ChildGrowthTracker } from '../components/ChildGrowthTracker';
 import { ProfilesProvider } from '../contexts/ProfilesContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ToastProvider } from '../contexts/ToastContext';
@@ -18,13 +19,16 @@ import {
   normaliseProfile,
   recordDoseEvent,
   removeGrowthMeasurement,
+  updateGrowthMeasurement,
 } from '../lib/profileStore';
 import { STORAGE_KEYS, readJSON, writeJSON } from '../lib/storage';
 import {
   ageInMonths,
   assessMeasurement,
+  buildCombinedGrowthSeries,
   buildGrowthChartSeries,
   buildGrowthMeasurement,
+  computeGrowthProgress,
   interpolateWhoBand,
   mapVaccinesToMonths,
   nearbyVaccinesForDate,
@@ -256,7 +260,31 @@ describe('profileStore growth persistence, normalisation, and backup merge', () 
       expect(merged.profiles[0].growth?.map((g) => g.id)).toEqual(['g-1', 'g-2', 'g-3']);
     }
 
-    const afterRemove = removeGrowthMeasurement(added2.profiles, base.id, 'g-1');
+    const updated = updateGrowthMeasurement(added2.profiles, base.id, 'g-2', {
+      date: '2024-09-05',
+      weightKg: 5.9,
+      heightCm: 61.0,
+      notes: 'Updated clinic card',
+    });
+    expect(updated.error).toBeUndefined();
+    expect(updated.measurement?.weightKg).toBe(5.9);
+    expect(updated.measurement?.heightCm).toBe(61.0);
+    expect(updated.measurement?.notes).toBe('Updated clinic card');
+
+    const progress = computeGrowthProgress(updated.profiles[0].growth ?? []);
+    expect(progress.checkupCount).toBe(2);
+    expect(progress.latestWeightKg).toBe(5.9);
+    expect(progress.weightDeltaKg).toBe(1.8);
+    expect(progress.latestHeightCm).toBe(61.0);
+    expect(progress.heightDeltaCm).toBe(7.8);
+    expect(progress.bmi).toBe(15.9);
+
+    const combinedSeries = buildCombinedGrowthSeries(updated.profiles[0], 24, false);
+    expect(combinedSeries).toHaveLength(2);
+    expect(combinedSeries[1].weightKg).toBe(5.9);
+    expect(combinedSeries[1].heightCm).toBe(61.0);
+
+    const afterRemove = removeGrowthMeasurement(updated.profiles, base.id, 'g-1');
     expect(afterRemove[0].growth?.map((g) => g.id)).toEqual(['g-2']);
   });
 });
@@ -348,5 +376,71 @@ describe('ChildGrowthChart UI component', () => {
 
     await waitFor(() => expect(screen.getByText(en['growth.empty.title'])).toBeTruthy());
     expect(readJSON<Profile[]>(STORAGE_KEYS.profiles, [])[0].growth).toHaveLength(0);
+  });
+
+  it('supports combined trend mode, displays progress deltas & BMI, and edits existing measurements inline', async () => {
+    const user = userEvent.setup();
+    const dob = toISODate(addDays(startOfToday(), -240));
+    const d1 = toISODate(addDays(startOfToday(), -90));
+    const d2 = toISODate(addDays(startOfToday(), -10));
+    const base = createProfile({
+      name: 'Ayaan Karim',
+      dateOfBirth: dob,
+      relationship: 'child',
+      gender: 'male',
+    }).profile!;
+
+    let profiles = [base];
+    profiles = addGrowthMeasurement(profiles, base.id, {
+      id: 'm1',
+      date: d1,
+      weightKg: 6.5,
+      heightCm: 63.0,
+    }).profiles;
+    profiles = addGrowthMeasurement(profiles, base.id, {
+      id: 'm2',
+      date: d2,
+      weightKg: 8.1,
+      heightCm: 69.5,
+      notes: '8m well-baby visit',
+    }).profiles;
+    writeJSON(STORAGE_KEYS.profiles, profiles);
+
+    render(
+      <ThemeProvider>
+        <I18nProvider>
+          <ToastProvider>
+            <ProfilesProvider>
+              <ChildGrowthTracker />
+            </ProfilesProvider>
+          </ToastProvider>
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText(en['growth.summary.checkups'].replace('{0}', '2'))).toBeTruthy();
+    expect(screen.getByText(/\+1\.6 kg/)).toBeTruthy();
+    expect(screen.getByText(/\+6\.5 cm/)).toBeTruthy();
+    expect(screen.getByText(/Latest BMI: 16\.8/)).toBeTruthy();
+
+    // Switch to Combined Trend view
+    const bothTab = screen.getByRole('button', { name: en['growth.metric.both'] });
+    await user.click(bothTab);
+    expect(bothTab.getAttribute('aria-pressed')).toBe('true');
+
+    // Edit the latest measurement inline
+    const editButtons = screen.getAllByRole('button', {
+      name: new RegExp(`^${en['growth.log.edit']}`),
+    });
+    await user.click(editButtons[0]);
+
+    const weightField = document.getElementById('growth-weight') as HTMLInputElement;
+    await user.clear(weightField);
+    await user.type(weightField, '8.3');
+    await user.click(screen.getByRole('button', { name: en['growth.log.editSave'] }));
+
+    await waitFor(() => expect(screen.getAllByText(/8\.3/).length).toBeGreaterThan(0));
+    const saved = readJSON<Profile[]>(STORAGE_KEYS.profiles, []);
+    expect(saved[0].growth?.find((g) => g.id === 'm2')?.weightKg).toBe(8.3);
   });
 });

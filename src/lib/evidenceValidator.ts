@@ -18,6 +18,7 @@ import { conflicts } from '../data/evidence/conflicts';
 import { claimsOf, vaccineRecords } from '../data/evidence/records';
 import {
   getSource,
+  isSufficientForBackgroundClaim,
   isSufficientForClinicalClaim,
   isSufficientForProgrammeFact,
   sourceRegistry,
@@ -143,6 +144,12 @@ function summarise(findings: Finding[]): EvidenceReport['summary'] {
   return summary;
 }
 
+function isSourceSufficientForKind(sourceId: string, kind: Claim['kind']): boolean {
+  if (CLINICAL_KINDS.has(kind)) return isSufficientForClinicalClaim(sourceId);
+  if (kind === 'programme-fact') return isSufficientForProgrammeFact(sourceId);
+  return isSufficientForBackgroundClaim(sourceId);
+}
+
 function checkClaim(
   claim: Claim<unknown>,
   record: VaccineRecord,
@@ -193,12 +200,7 @@ function checkClaim(
         entityKind: 'record',
         message: 'Claim is marked evidence-verified but cites no source.',
       });
-    } else if (
-      !claim.evidence.every(
-        (ref) =>
-          isSufficientForClinicalClaim(ref.sourceId) || isSufficientForProgrammeFact(ref.sourceId),
-      )
-    ) {
+    } else if (!claim.evidence.every((ref) => isSourceSufficientForKind(ref.sourceId, claim.kind))) {
       findings.push({
         code: 'CLAIM_VERIFIED_WITHOUT_SUFFICIENT_EVIDENCE',
         severity: 'error',
@@ -549,14 +551,44 @@ function checkConflicts(findings: Finding[]): void {
           message: 'Unresolved conflict has no required action.',
         });
       }
-    } else if (!conflict.resolution) {
+    } else if (
+      !conflict.resolution ||
+      !conflict.resolution.decision.trim() ||
+      !conflict.resolution.decidedBy.trim() ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(conflict.resolution.decidedOn) ||
+      conflict.resolution.evidence.length === 0
+    ) {
       findings.push({
         code: 'CONFLICT_RESOLVED_WITHOUT_DECISION',
         severity: 'error',
         entityId: conflict.id,
         entityKind: 'conflict',
-        message: 'Conflict is marked resolved but records no decision, date or evidence.',
+        message: 'Conflict is marked resolved but records no complete decision, reviewer, date, or evidence.',
       });
+    } else {
+      for (const ref of conflict.resolution.evidence) {
+        const source = getSource(ref.sourceId);
+        if (!source) {
+          findings.push({
+            code: 'EVIDENCE_REF_UNRESOLVED',
+            severity: 'error',
+            entityId: conflict.id,
+            entityKind: 'conflict',
+            message: `Resolution cites unknown source "${ref.sourceId}".`,
+          });
+        } else if (
+          source.reviewStatus === 'rejected' ||
+          source.sufficiency === 'insufficient-for-clinical'
+        ) {
+          findings.push({
+            code: 'INSUFFICIENT_SOURCE_FOR_CLINICAL_CLAIM',
+            severity: 'error',
+            entityId: conflict.id,
+            entityKind: 'conflict',
+            message: `Resolution cites insufficient/rejected source "${source.id}".`,
+          });
+        }
+      }
     }
     for (const statement of conflict.statements) {
       for (const ref of statement.evidence) {
@@ -588,7 +620,7 @@ function checkConflicts(findings: Finding[]): void {
 }
 
 export function validateEvidence(options: { referenceDate?: string } = {}): EvidenceReport {
-  const referenceDate = options.referenceDate ?? '2026-10-31';
+  const referenceDate = options.referenceDate ?? '2026-11-21';
   const findings: Finding[] = [];
 
   const usedSourceIds = new Set<string>();
@@ -698,17 +730,32 @@ export function renderReportMarkdown(report: EvidenceReport): string {
   lines.push('## 3. Conflicting sources');
   lines.push('');
   lines.push(
-    'Recorded, never merged. Each entry stays unresolved until an authoritative document or a named reviewer decides it.',
+    'Recorded transparently, never silently merged. Unresolved entries remain open until primary official national circulars confirm domestic rules; resolved entries cite verified authoritative sources.',
   );
   lines.push('');
+  const resolvedList = conflicts.filter((conflict) => conflict.status !== 'unresolved');
+  lines.push(`### Open (unresolved) conflicts (${report.sections.conflictingSources.length})`);
+  lines.push('');
   for (const conflict of report.sections.conflictingSources) {
-    lines.push(`### ${conflict.id} — ${conflict.title.en}`);
+    lines.push(`#### ${conflict.id} — ${conflict.title.en}`);
     lines.push('');
     for (const statement of conflict.statements) {
       lines.push(`- ${statement.statement}  \n  _origin: ${statement.origin}_`);
     }
     lines.push('');
     lines.push(`**Required action:** ${conflict.requiredAction}`);
+    lines.push('');
+  }
+  lines.push(`### Resolved conflicts (${resolvedList.length})`);
+  lines.push('');
+  for (const conflict of resolvedList) {
+    lines.push(`#### ${conflict.id} (${conflict.status}) — ${conflict.title.en}`);
+    lines.push('');
+    if (conflict.resolution) {
+      const sourceIds = conflict.resolution.evidence.map((ref) => `\`${ref.sourceId}\``).join(', ');
+      lines.push(`- **Decision (${conflict.resolution.decidedOn}, ${conflict.resolution.decidedBy}):** ${conflict.resolution.decision}`);
+      lines.push(`- **Sources:** ${sourceIds}`);
+    }
     lines.push('');
   }
   lines.push('## 4. Missing or insufficient references');

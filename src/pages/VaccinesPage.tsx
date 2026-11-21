@@ -6,10 +6,40 @@ import { Skeleton } from '../components/Skeleton';
 import { VaccineModal } from '../components/VaccineModal';
 import { useDebouncedValue } from '../hooks';
 import { useI18n } from '../i18n';
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
+import { evidenceForLegacy, type ProgrammeClass } from '../data/evidence';
 import { allVaccines, vaccineColors, type Vaccine } from '../data/vaccines';
 
 const CATEGORIES = ['routine', 'campaign', 'special', 'recommended', 'non_routine'] as const;
 type Category = (typeof CATEGORIES)[number];
+
+const PROGRAMME_GROUPS = ['epi', 'campaigns', 'private', 'international', 'research'] as const;
+type ProgrammeGroup = (typeof PROGRAMME_GROUPS)[number];
+
+function matchesProgrammeGroup(programme: ProgrammeClass | undefined, group: ProgrammeGroup): boolean {
+  if (!programme) return group === 'international';
+  switch (group) {
+    case 'epi':
+      return programme === 'bd-nip-routine';
+    case 'campaigns':
+      return (
+        programme === 'bd-national-campaign' ||
+        programme === 'bd-sia' ||
+        programme === 'bd-planned-introduction' ||
+        programme === 'bd-special-risk'
+      );
+    case 'private':
+      return programme === 'private-market-bd';
+    case 'international':
+      return (
+        programme === 'international-reference' ||
+        programme === 'travel' ||
+        programme === 'occupational'
+      );
+    case 'research':
+      return programme === 'research-not-available';
+  }
+}
 
 type SortKey = 'name' | 'category' | 'introduced';
 
@@ -35,6 +65,7 @@ export default function VaccinesPage() {
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | 'all'>('all');
+  const [programmeGroup, setProgrammeGroup] = useState<ProgrammeGroup | 'all'>('all');
   const [ageGroup, setAgeGroup] = useState<string>('all');
   const [sort, setSort] = useState<SortKey>('name');
   const [selected, setSelected] = useState<Vaccine | null>(null);
@@ -51,8 +82,13 @@ export default function VaccinesPage() {
 
     const filtered = allVaccines.filter((vaccine) => {
       if (category !== 'all' && vaccine.category !== category) return false;
+      if (programmeGroup !== 'all') {
+        const evidence = evidenceForLegacy(vaccine.id);
+        if (!matchesProgrammeGroup(evidence?.programme, programmeGroup)) return false;
+      }
       if (ageGroup !== 'all' && vaccine.ageGroup !== ageGroup) return false;
       if (!needle) return true;
+      const clinical = getVaccineClinicalProfile(vaccine);
       return (
         vaccine.name.en.toLowerCase().includes(needle) ||
         vaccine.name.bn.includes(debouncedQuery.trim()) ||
@@ -60,6 +96,10 @@ export default function VaccinesPage() {
         vaccine.fullName.bn.includes(debouncedQuery.trim()) ||
         vaccine.disease.en.toLowerCase().includes(needle) ||
         vaccine.disease.bn.includes(debouncedQuery.trim()) ||
+        clinical.platform.en.toLowerCase().includes(needle) ||
+        clinical.platform.bn.includes(debouncedQuery.trim()) ||
+        clinical.route.en.toLowerCase().includes(needle) ||
+        clinical.formulations.toLowerCase().includes(needle) ||
         vaccine.id.toLowerCase().includes(needle)
       );
     });
@@ -73,14 +113,18 @@ export default function VaccinesPage() {
       }
       return collator.compare(a.name[language], b.name[language]);
     });
-  }, [ageGroup, category, debouncedQuery, language, sort]);
+  }, [ageGroup, category, debouncedQuery, language, programmeGroup, sort]);
 
   const activeFilters =
-    (category !== 'all' ? 1 : 0) + (ageGroup !== 'all' ? 1 : 0) + (query.trim() ? 1 : 0);
+    (category !== 'all' ? 1 : 0) +
+    (programmeGroup !== 'all' ? 1 : 0) +
+    (ageGroup !== 'all' ? 1 : 0) +
+    (query.trim() ? 1 : 0);
 
   const clearFilters = () => {
     setQuery('');
     setCategory('all');
+    setProgrammeGroup('all');
     setAgeGroup('all');
     setSort('name');
   };
@@ -102,8 +146,8 @@ export default function VaccinesPage() {
 
       {/* --- Controls ------------------------------------------------------ */}
       <div className="card-padded mt-8 no-print">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-          <div className="relative">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
+          <div className="relative md:col-span-2 lg:col-span-1">
             <label className="sr-only" htmlFor="vaccine-search">
               {t('vaccines.search')}
             </label>
@@ -119,6 +163,25 @@ export default function VaccinesPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
+          </div>
+
+          <div>
+            <label className="label" htmlFor="vaccine-programme">
+              {t('vaccines.filter.programme')}
+            </label>
+            <select
+              id="vaccine-programme"
+              className="input-field"
+              value={programmeGroup}
+              onChange={(event) => setProgrammeGroup(event.target.value as ProgrammeGroup | 'all')}
+            >
+              <option value="all">{t('common.label.all')}</option>
+              {PROGRAMME_GROUPS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`vaccines.programmeGroup.${value}`)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -209,6 +272,8 @@ export default function VaccinesPage() {
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((vaccine, index) => {
             const { bg, text } = colourClasses(vaccine.color);
+            const evidence = evidenceForLegacy(vaccine.id);
+            const isResearch = evidence ? !evidence.publishable : false;
             return (
               <li
                 key={vaccine.id}
@@ -233,30 +298,89 @@ export default function VaccinesPage() {
                 </div>
 
                 <div className="flex flex-1 flex-col gap-3 p-5">
+                  <div className="space-y-1">
+                    {evidence && (
+                      <p
+                        className={`text-xs font-semibold ${
+                          evidence.programme === 'bd-nip-routine'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : isResearch
+                              ? 'text-red-700 dark:text-red-400'
+                              : 'text-sky-700 dark:text-sky-400'
+                        } ${isBangla ? 'font-bangla' : ''}`}
+                      >
+                        {t(`vaccines.programme.${evidence.programme}`)}
+                      </p>
+                    )}
+                    <p
+                      className={`text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t(`vaccines.category.${vaccine.category}`)}
+                      <span aria-hidden="true"> · </span>
+                      {isResearch
+                        ? t('vaccines.researchOnlyDoses')
+                        : t('vaccines.doses', vaccine.doses)}
+                      {vaccine.efficacy ? (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          {t('vaccines.efficacy')}: {vaccine.efficacy}
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+
                   <p
-                    className={`line-clamp-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                    className={`line-clamp-2 text-sm font-medium text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}
                   >
                     {vaccine.disease[language]}
                   </p>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="badge-neutral">
-                      {t(`vaccines.category.${vaccine.category}`)}
-                    </span>
-                    <span className="badge-neutral">{t('vaccines.doses', vaccine.doses)}</span>
-                  </div>
+                  {(() => {
+                    const clinical = getVaccineClinicalProfile(vaccine);
+                    return (
+                      <dl className="space-y-1.5 border-t border-neutral-100 pt-2.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-300">
+                        <div>
+                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                            {t('vaccines.detail.schedule')}:{' '}
+                          </dt>
+                          <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                            {vaccine.schedule[language]}
+                          </dd>
+                        </div>
+                        <div className="line-clamp-1">
+                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                            {t('vaccines.detail.platform')}:{' '}
+                          </dt>
+                          <dd className={`inline ${isBangla ? 'font-bangla' : ''}`}>
+                            {clinical.platform[language]}
+                          </dd>
+                        </div>
+                        <div className="line-clamp-1">
+                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                            {t('vaccines.detail.route')}:{' '}
+                          </dt>
+                          <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                            {clinical.route[language]}
+                          </dd>
+                        </div>
+                      </dl>
+                    );
+                  })()}
 
                   <div className="mt-auto flex gap-2 pt-2">
-                    <Link to={`/vaccines/${vaccine.id}`} className="btn-secondary btn-sm flex-1">
-                      {t('common.actions.learnMore')}
+                    <Link
+                      to={`/vaccines/${vaccine.id}`}
+                      className="btn-secondary btn-sm flex-1 whitespace-nowrap shrink-0"
+                    >
+                      {t('vaccines.detail.openFullProfile')}
                     </Link>
                     <button
                       type="button"
-                      className="btn-ghost btn-sm"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
                       onClick={() => setSelected(vaccine)}
-                      aria-label={`${t('common.actions.viewAll')}: ${vaccine.name.en}`}
+                      aria-label={`${t('vaccines.detail.quickOverview')}: ${vaccine.name.en}`}
                     >
-                      {t('common.actions.viewAll')}
+                      {t('vaccines.detail.quickOverview')}
                     </button>
                   </div>
                 </div>

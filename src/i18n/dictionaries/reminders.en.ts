@@ -8,13 +8,14 @@ import type { TranslationDictionary } from '../types';
 
 export const en: TranslationDictionary = {
   'reminders.title': 'Reminders',
-  'reminders.subtitle': 'Browser notifications and a printable checklist for every upcoming dose',
+  'reminders.subtitle':
+    '48-hour Web Push alerts, browser notifications, and a printable checklist for every upcoming dose',
   'reminders.empty.title': 'No reminders yet',
   'reminders.empty.body':
     'Reminders are generated from each profile’s date of birth. Add a profile first.',
   'reminders.permission.title': 'Enable browser notifications',
   'reminders.permission.body':
-    'TikaTrack asks your browser for permission — notifications never leave this device.',
+    'Allow notifications to receive automatic 48-hour advance Web Push reminders and in-app alerts on this device.',
   'reminders.permission.grant': 'Allow notifications',
   'reminders.permission.granted': 'Notifications are on',
   'reminders.permission.denied': 'Notifications are blocked in your browser settings',
@@ -43,7 +44,7 @@ export const en: TranslationDictionary = {
   'reminders.print': 'Print checklist',
   'reminders.howItWorks.title': 'How reminders work',
   'reminders.howItWorks.body':
-    'TikaTrack builds reminders from each member’s schedule and stores them in this browser. If you allow notifications, due reminders are shown while the app is open — nothing is scheduled while it is closed.',
+    'TikaTrack derives reminders from each member’s schedule. When 48-hour Web Push is enabled, your upcoming schedule stays synced with our VAPID push service and alerts your browser 48 hours before every due date — even when the tab is closed.',
   'reminders.permission.hint':
     'Notifications are optional. TikaTrack still lists due reminders on this page without them.',
   'reminders.refresh': 'Recalculate reminders',
@@ -68,4 +69,24 @@ export const en: TranslationDictionary = {
   'reminders.calendar.body': '{0} reminders added with alarms',
   'reminders.filter.member': 'Filter by member',
   'reminders.filter.allMembers': 'All family members',
+  'reminders.push.title': '48-Hour Web Push Reminders',
+  'reminders.push.body':
+    'Receive an automatic browser push alert 48 hours before each upcoming vaccination due date — even when TikaTrack is closed.',
+  'reminders.push.enable': 'Enable 48h Web Push',
+  'reminders.push.enabling': 'Enabling…',
+  'reminders.push.active': 'Subscribed — 48h advance push alerts active',
+  'reminders.push.queued': '{0} upcoming doses queued for 48h push alerts',
+  'reminders.push.within48h': '{0} doses due within 48 hours',
+  'reminders.push.test': 'Send 48h test push',
+  'reminders.push.sync': 'Sync schedule',
+  'reminders.push.disable': 'Turn off push',
+  'reminders.push.unsupported': 'Web Push is not supported in this browser.',
+  'reminders.push.subscribedToast': '48-hour Web Push enabled',
+  'reminders.push.syncedToast': 'Schedule synced for 48h alerts',
+  'reminders.push.testSent': 'Test Web Push sent',
+  'reminders.push.testBody':
+    'Check your system notifications for the 48-hour vaccination reminder preview.',
+  'reminders.push.disabledToast': 'Web Push disabled on this device',
+  'reminders.push.error': 'Could not update Web Push subscription',
+  'reminders.lead.hours48': '2 days (48h)',
 };

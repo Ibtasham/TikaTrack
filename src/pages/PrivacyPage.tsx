@@ -200,14 +200,16 @@ export default function PrivacyPage() {
             </div>
             <div className="sm:col-span-2">
               <span className="badge-neutral">
-                {backend === 'supabase' ? (
+                {backend === 'firebase' || backend === 'supabase' ? (
                   <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
                 ) : (
                   <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
-                {backend === 'supabase'
-                  ? t('auth.cloudMode', getSupabaseProjectLabel())
-                  : t('auth.localMode')}
+                {backend === 'firebase'
+                  ? t('auth.cloudMode', 'Google Cloud · Firebase')
+                  : backend === 'supabase'
+                    ? t('auth.cloudMode', getSupabaseProjectLabel())
+                    : t('auth.localMode')}
               </span>
             </div>
           </dl>
@@ -328,7 +330,7 @@ export default function PrivacyPage() {
           </div>
         </div>
 
-        {user && (
+        {user && backend !== 'firebase' && (
           <form className="mt-5 grid gap-4 sm:grid-cols-3" onSubmit={handleChangePassword}>
             <div>
               <label className="label" htmlFor="current-password">
@@ -397,6 +399,22 @@ export default function PrivacyPage() {
           </form>
         )}
 
+        {user && backend === 'firebase' && (
+          <div className="mt-4">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={async () => {
+                await signOut();
+                toast.info(t('auth.signedOut'));
+              }}
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              {t('common.actions.signOut')}
+            </button>
+          </div>
+        )}
+
         {user && (
           <div className="mt-6 border-t border-neutral-200 pt-5 dark:border-neutral-800">
             <h3
@@ -441,7 +459,10 @@ export default function PrivacyPage() {
           className={`mt-3 rounded-xl bg-sky-50 p-3 text-sm text-sky-900 dark:bg-sky-950/40 dark:text-sky-200 ${isBangla ? 'font-bangla' : ''}`}
         >
           {cloudEnabled
-            ? t('auth.cloudMode', getSupabaseProjectLabel())
+            ? t(
+                'auth.cloudMode',
+                backend === 'firebase' ? 'Google Cloud · Firebase' : getSupabaseProjectLabel(),
+              )
             : t('auth.cloudNotConfigured')}
         </p>
       </section>

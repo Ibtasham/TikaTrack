@@ -56,7 +56,7 @@ const FULL_LEDGER: VaccinationEvent[] = MILESTONE_DOSES.map((milestone, index) =
   seriesId: seriesIdFor(milestone.vaccineId),
   doseNumber: milestone.doseNumber,
   scheduledDoseId: milestone.scheduledDoseId,
-  date: calculateScheduledDate('2026-07-12', milestone.ageDays),
+  date: calculateScheduledDate('2026-07-12', milestone.ageDays, milestone.ageMonths),
   createdAt: '2026-11-01T00:00:00.000Z',
   provenance: 'manual',
 }));
@@ -137,19 +137,21 @@ describe('buildBotContext', () => {
     // complete (11 of 14, 79%), which is the bug the dose ledger fixes: the
     // remaining seven doses are now reported as overdue.
     expect(context?.completed).toBe(4);
-    expect(context?.totalScheduled).toBe(14);
-    expect(context?.progressPercentage).toBe(29);
+    expect(context?.totalScheduled).toBe(16);
+    expect(context?.progressPercentage).toBe(25);
     expect(context?.nextDue?.vaccine).toBe('MR-1');
-    expect(context?.nextDue?.isoDate).toBe('2027-04-08');
-    expect(context?.nextDue?.daysText).toBe('in 147 days');
+    expect(context?.nextDue?.isoDate).toBe('2027-04-12');
+    expect(context?.nextDue?.daysText).toBe('in 151 days');
     expect(context?.overdue.map((dose) => dose.vaccine)).toEqual([
       'OPV-1',
+      'fIPV-1',
       'Pentavalent-2',
       'OPV-2',
       'PCV-2',
       'Pentavalent-3',
       'OPV-3',
       'PCV-3',
+      'fIPV-2',
     ]);
     expect(context?.dueToday).toEqual([]);
   });
@@ -167,7 +169,7 @@ describe('buildBotContext', () => {
   it('lists the most overdue dose first and says how long ago it was due', () => {
     const context = buildBotContext(profile({ records: {} }), 'en');
 
-    expect(context?.overdue.length).toBe(11);
+    expect(context?.overdue.length).toBe(13);
     expect(context?.overdue[0].isoDate).toBe('2026-07-12');
     expect(context?.overdue[0].days).toBe(-123);
     expect(context?.overdue[0].daysText).toBe('123 days ago');
@@ -177,8 +179,8 @@ describe('buildBotContext', () => {
   });
 
   it('flags a dose that falls due today', () => {
-    // 270 days before TODAY puts the MR-1 milestone exactly on 12 Nov 2026.
-    const context = buildBotContext(profile({ dateOfBirth: '2026-02-15', records: {} }), 'en');
+    // 9 calendar months before 2026-11-12 puts the MR-1 milestone on TODAY.
+    const context = buildBotContext(profile({ dateOfBirth: '2026-02-12', records: {} }), 'en');
 
     expect(context?.dueToday.map((dose) => dose.vaccine)).toContain('MR-1');
     expect(context?.dueToday[0].days).toBe(0);
@@ -190,22 +192,21 @@ describe('buildBotContext', () => {
   it('reports nothing outstanding when every dose is recorded', () => {
     const context = buildBotContext(profile({ events: FULL_LEDGER }), 'en');
 
-    expect(context?.completed).toBe(14);
+    expect(context?.completed).toBe(16);
     expect(context?.nextDue).toBeNull();
     expect(context?.overdue).toEqual([]);
     expect(context?.dueToday).toEqual([]);
   });
 
   it('counts one dose per legacy record, never a whole series', () => {
-    // Six 2.x records for a child whose schedule has 14 milestone doses. BCG and
+    // Six 2.x records for a child whose schedule has 16 milestone doses. BCG and
     // TCV are single-dose, so their records do complete them; OPV, Pentavalent,
-    // PCV and MR are not, and one record each cannot cover the rest. The old
-    // engine reported 14 of 14 here.
+    // PCV, fIPV and MR are not, and one record each cannot cover the rest.
     const context = buildBotContext(profile({ records: ALL_RECORDED }), 'en');
 
     expect(context?.completed).toBe(6);
-    expect(context?.totalScheduled).toBe(14);
-    expect(context?.progressPercentage).toBe(43);
+    expect(context?.totalScheduled).toBe(16);
+    expect(context?.progressPercentage).toBe(38);
   });
 
   it('refuses to guess without a date of birth', () => {
@@ -265,8 +266,8 @@ describe('renderBotContext', () => {
 
     expect(text).toContain("From Ayesha's record on this device");
     expect(text).toContain('Age:');
-    expect(text).toContain('Doses recorded: 4 of 14');
-    expect(text).toContain('Next due: MR-1 — 8 April 2027 (in 147 days)');
+    expect(text).toContain('Doses recorded: 4 of 16');
+    expect(text).toContain('Next due: MR-1 — 12 April 2027 (in 151 days)');
     expect(text).toContain(`Calculated ${formatDate(todayISO(), 'en')}`);
   });
 
@@ -274,7 +275,7 @@ describe('renderBotContext', () => {
     const text = renderBotContext(buildBotContext(profile({ records: {} }), 'en')!, 'en');
 
     expect(text).toContain('Overdue: BCG (123 days ago)');
-    expect(text).toContain('+8 more');
+    expect(text).toContain('+10 more');
     // Only the first three are named, so the message stays readable.
     expect(text.match(/\(\d+ days? ago\)/g)).toHaveLength(3);
   });
@@ -287,7 +288,7 @@ describe('renderBotContext', () => {
 
   it('mentions a dose due today', () => {
     const text = renderBotContext(
-      buildBotContext(profile({ dateOfBirth: '2026-02-15' }), 'en')!,
+      buildBotContext(profile({ dateOfBirth: '2026-02-12' }), 'en')!,
       'en',
     );
     expect(text).toContain('Due today: MR-1');
@@ -308,10 +309,10 @@ describe('renderBotContext', () => {
     const text = renderBotContext(context, 'bn');
 
     expect(text).toContain('এই ডিভাইসে সংরক্ষিত Ayesha-এর তথ্য থেকে');
-    expect(text).toContain('টিকা দেওয়া হয়েছে: ১৪টির মধ্যে ৪টি');
+    expect(text).toContain('টিকা দেওয়া হয়েছে: ১৬টির মধ্যে ৪টি');
     expect(text).toContain('পরবর্তী টিকা: এমআর-১');
-    expect(text).toContain('১৪৭ দিন পরে');
-    expect(text).not.toMatch(/\b10 of 14\b/);
+    expect(text).toContain('১৫১ দিন পরে');
+    expect(text).not.toMatch(/\b10 of 16\b/);
   });
 
   it('is plain text with one fact per line', () => {

@@ -16,8 +16,9 @@
       "@/*": ["./src/*"]
     },
     "allowImportingTsExtensions": true,
+    "strict": true,
     "noEmit": true
   },
-  "include": ["src"],
+  "include": ["src", "server.ts"],
   "exclude": ["dist"]
 }

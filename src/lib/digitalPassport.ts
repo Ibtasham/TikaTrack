@@ -46,9 +46,10 @@ import {
 export const PASSPORT_FORMAT_VERSION = 2;
 
 /** Versions this build can still verify. Certificates already issued keep working. */
-export const SUPPORTED_PASSPORT_FORMAT_VERSIONS: readonly number[] = [1, 2];
+export const SUPPORTED_PASSPORT_FORMAT_VERSIONS: readonly number[] = [1, 2, 3];
 
 export const PAYLOAD_PREFIX = `TIKAPASS${PASSPORT_FORMAT_VERSION}`;
+export const PORTABLE_PAYLOAD_PREFIX = 'TIKAPASS3';
 
 const FIELD_SEPARATOR = '|';
 const RECORD_SEPARATOR = ',';
@@ -98,7 +99,8 @@ export interface Passport {
   payload: string;
 }
 
-export type SignatureAlgorithm = 'hmac-sha256' | 'fnv1a-32';
+export type SignatureAlgorithm = 'ecdsa-p256' | 'hmac-sha256' | 'fnv1a-32';
+export type PassportSigningMode = 'device-hmac' | 'portable-ecdsa';
 
 export type PassportVerification =
   | { status: 'valid'; passport: Passport; warnings: PassportWarning[] }
@@ -180,6 +182,198 @@ function base64Url(buffer: Uint8Array): string {
     binary += String.fromCharCode(byte);
   });
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(text: string): Uint8Array | null {
+  try {
+    const padded = text.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((text.length + 3) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Portable ECDSA P-256 (v3) with compressed 33-byte public keys
+// ---------------------------------------------------------------------------
+
+const ECDSA_KEY_STORAGE_KEY = `${STORAGE_PREFIX}ecdsa-keypair`;
+
+const P256_P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
+const P256_A = P256_P - 3n;
+const P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+  let acc = 0n;
+  for (const byte of bytes) acc = (acc << 8n) | BigInt(byte);
+  return acc;
+}
+
+function bigIntToBytes32(value: bigint): Uint8Array {
+  const out = new Uint8Array(32);
+  let v = value;
+  for (let i = 31; i >= 0; i -= 1) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
+}
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  let b = ((base % mod) + mod) % mod;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) result = (result * b) % mod;
+    b = (b * b) % mod;
+    e >>= 1n;
+  }
+  return result;
+}
+
+function compressP256Point(uncompressed: Uint8Array): Uint8Array | null {
+  if (uncompressed.length !== 65 || uncompressed[0] !== 0x04) return null;
+  const out = new Uint8Array(33);
+  out[0] = uncompressed[64] & 1 ? 0x03 : 0x02;
+  out.set(uncompressed.subarray(1, 33), 1);
+  return out;
+}
+
+function decompressP256Point(compressed: Uint8Array): Uint8Array | null {
+  if (compressed.length !== 33 || (compressed[0] !== 0x02 && compressed[0] !== 0x03)) {
+    return null;
+  }
+  const xBytes = compressed.subarray(1, 33);
+  const x = bytesToBigInt(xBytes);
+  if (x >= P256_P) return null;
+  // y^2 = x^3 + a*x + b (mod p)
+  const rhs = (((x * x) % P256_P) * x + P256_A * x + P256_B) % P256_P;
+  const positiveRhs = (rhs + P256_P) % P256_P;
+  // p === 3 (mod 4) so sqrt(z) = z^((p+1)/4) mod p
+  let y = modPow(positiveRhs, (P256_P + 1n) >> 2n, P256_P);
+  if ((y * y) % P256_P !== positiveRhs) return null;
+  const expectOdd = compressed[0] === 0x03;
+  if (((y & 1n) === 1n) !== expectOdd) y = P256_P - y;
+
+  const uncompressed = new Uint8Array(65);
+  uncompressed[0] = 0x04;
+  uncompressed.set(xBytes, 1);
+  uncompressed.set(bigIntToBytes32(y), 33);
+  return uncompressed;
+}
+
+interface StoredEcdsaKeys {
+  publicJwk: JsonWebKey;
+  privateJwk: JsonWebKey;
+  compressedPubB64: string;
+}
+
+async function getOrCreateEcdsaKeyPair(): Promise<{
+  privateKey: CryptoKey;
+  compressedPubB64: string;
+} | null> {
+  try {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) return null;
+
+    if (isStorageAvailable()) {
+      const raw = readString(ECDSA_KEY_STORAGE_KEY, '');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as Partial<StoredEcdsaKeys>;
+          if (parsed.privateJwk && parsed.compressedPubB64) {
+            const privateKey = await subtle.importKey(
+              'jwk',
+              parsed.privateJwk,
+              { name: 'ECDSA', namedCurve: 'P-256' },
+              false,
+              ['sign'],
+            );
+            return { privateKey, compressedPubB64: parsed.compressedPubB64 };
+          }
+        } catch {
+          // Regenerate corrupted stored keypair
+        }
+      }
+    }
+
+    const generated = await subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    );
+    const rawPub = new Uint8Array(await subtle.exportKey('raw', generated.publicKey));
+    const compressed = compressP256Point(rawPub);
+    if (!compressed) return null;
+    const compressedPubB64 = base64Url(compressed);
+
+    if (isStorageAvailable()) {
+      const [publicJwk, privateJwk] = await Promise.all([
+        subtle.exportKey('jwk', generated.publicKey),
+        subtle.exportKey('jwk', generated.privateKey),
+      ]);
+      writeString(
+        ECDSA_KEY_STORAGE_KEY,
+        JSON.stringify({ publicJwk, privateJwk, compressedPubB64 }),
+      );
+    }
+
+    return { privateKey: generated.privateKey, compressedPubB64 };
+  } catch {
+    return null;
+  }
+}
+
+async function signPayloadEcdsa(body: string): Promise<string | null> {
+  try {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) return null;
+    const pair = await getOrCreateEcdsaKeyPair();
+    if (!pair) return null;
+    const signatureBytes = new Uint8Array(
+      await subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        pair.privateKey,
+        toBytes(body) as unknown as BufferSource,
+      ),
+    );
+    return `${pair.compressedPubB64}.${base64Url(signatureBytes)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyPayloadEcdsa(body: string, compoundSignature: string): Promise<boolean> {
+  try {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) return false;
+    const dot = compoundSignature.indexOf('.');
+    if (dot <= 0) return false;
+    const compressedBytes = fromBase64Url(compoundSignature.slice(0, dot));
+    const signatureBytes = fromBase64Url(compoundSignature.slice(dot + 1));
+    if (!compressedBytes || !signatureBytes || signatureBytes.length !== 64) return false;
+    const uncompressed = decompressP256Point(compressedBytes);
+    if (!uncompressed) return false;
+
+    const pubKey = await subtle.importKey(
+      'raw',
+      uncompressed as unknown as BufferSource,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify'],
+    );
+    return await subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      pubKey,
+      signatureBytes as unknown as BufferSource,
+      toBytes(body) as unknown as BufferSource,
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Length of an FNV-1a signature in base36, so `parsePassportPayload` can tell algorithms apart. */
@@ -284,6 +478,7 @@ function countLedgerDoses(profile: Profile): number {
 
 /** The canonical, signable part of a certificate — everything but the checksum. */
 function canonicalBody(input: {
+  prefix?: string;
   memberName: string;
   dateOfBirth: string;
   doses: PassportDose[];
@@ -307,7 +502,7 @@ function canonicalBody(input: {
     .join(RECORD_SEPARATOR);
 
   return [
-    PAYLOAD_PREFIX,
+    input.prefix ?? PAYLOAD_PREFIX,
     sanitiseField(input.memberName, MAX_NAME_LENGTH),
     isoDateOnly(input.dateOfBirth),
     isoDateOnly(input.issuedAt),
@@ -319,6 +514,13 @@ export interface IssuePassportInput {
   profile: Profile;
   /** Override the issue time (used by tests). Defaults to now. */
   issuedAt?: string;
+  /**
+   * Signing mode:
+   * - `'device-hmac'` (default, `TIKAPASS2`): compact symmetric MAC holding up to 12 doses.
+   * - `'portable-ecdsa'` (`TIKAPASS3`): embeds compressed ECDSA P-256 public key + signature
+   *   so any device can verify offline without sharing a secret.
+   */
+  mode?: PassportSigningMode;
 }
 
 export interface IssuePassportResult {
@@ -356,6 +558,7 @@ function stripNote(dose: PassportDose): PassportDose {
 export async function issuePassport({
   profile,
   issuedAt,
+  mode = 'device-hmac',
 }: IssuePassportInput): Promise<IssuePassportResult> {
   if (!profile?.id) {
     return {
@@ -372,8 +575,9 @@ export async function issuePassport({
   const allDoses = normaliseDoses(profile);
   const totalDoses = countLedgerDoses(profile);
   const issued = issuedAt ?? new Date().toISOString();
+  const useEcdsa = mode === 'portable-ecdsa' && Boolean(globalThis.crypto?.subtle);
 
-  if (!getDeviceKey()) warnings.add('no-key');
+  if (!useEcdsa && !getDeviceKey()) warnings.add('no-key');
 
   // Ordered from "everything" to "as little as it takes to fit".
   const attempts: Array<{ doses: PassportDose[]; notesDropped: boolean }> = [
@@ -385,13 +589,40 @@ export async function issuePassport({
   }
 
   for (const attempt of attempts) {
-    const body = canonicalBody({
+    let body = canonicalBody({
+      prefix: PAYLOAD_PREFIX,
       memberName: profile.name,
       dateOfBirth: profile.dateOfBirth,
       doses: attempt.doses,
       issuedAt: issued,
     });
-    const { signature, algorithm } = await signPayload(body);
+    let signature: string;
+    let algorithm: SignatureAlgorithm;
+
+    if (useEcdsa) {
+      const ecdsaBody = canonicalBody({
+        prefix: PORTABLE_PAYLOAD_PREFIX,
+        memberName: profile.name,
+        dateOfBirth: profile.dateOfBirth,
+        doses: attempt.doses,
+        issuedAt: issued,
+      });
+      const ecdsaSig = await signPayloadEcdsa(ecdsaBody);
+      if (ecdsaSig) {
+        body = ecdsaBody;
+        signature = ecdsaSig;
+        algorithm = 'ecdsa-p256';
+      } else {
+        const signed = await signPayload(body);
+        signature = signed.signature;
+        algorithm = signed.algorithm;
+      }
+    } else {
+      const signed = await signPayload(body);
+      signature = signed.signature;
+      algorithm = signed.algorithm;
+    }
+
     const payload = `${body}${FIELD_SEPARATOR}${signature}`;
 
     // Fail here rather than at render time so the UI can explain why.
@@ -475,6 +706,13 @@ export function parsePassportPayload(payload: string): Passport | null {
       })
     : [];
 
+  const inferredAlgorithm: SignatureAlgorithm =
+    version >= 3 && signature.includes('.')
+      ? 'ecdsa-p256'
+      : signature.length === FNV_SIGNATURE_LENGTH
+        ? 'fnv1a-32'
+        : 'hmac-sha256';
+
   return {
     id: '',
     profileId: '',
@@ -483,7 +721,7 @@ export function parsePassportPayload(payload: string): Passport | null {
     doses,
     issuedAt,
     signature,
-    algorithm: signature.length === FNV_SIGNATURE_LENGTH ? 'fnv1a-32' : 'hmac-sha256',
+    algorithm: inferredAlgorithm,
     payload: trimmed,
   };
 }
@@ -491,10 +729,8 @@ export function parsePassportPayload(payload: string): Passport | null {
 /**
  * Verify a certificate payload.
  *
- * `tampered` means the structure parsed but the checksum did not match — either
- * the text was altered or it was produced on a different device. That ambiguity
- * is inherent to device-bound signing, and the UI must phrase it as such rather
- * than accusing anyone of forgery.
+ * - `TIKAPASS3` uses ECDSA P-256 with an embedded compressed public key and verifies across ANY device offline.
+ * - `TIKAPASS1`/`TIKAPASS2` verify against the issuing device's HMAC-SHA256 secret (or FNV-1a checksum).
  */
 export async function verifyPassportPayload(payload: string): Promise<PassportVerification> {
   const trimmed = (payload ?? '').trim();
@@ -512,6 +748,13 @@ export async function verifyPassportPayload(payload: string): Promise<PassportVe
   if (!parsed) return { status: 'invalid', reason: 'malformed' };
 
   const body = trimmed.slice(0, trimmed.lastIndexOf(FIELD_SEPARATOR));
+
+  if (parsed.algorithm === 'ecdsa-p256') {
+    const ok = await verifyPayloadEcdsa(body, parsed.signature);
+    if (!ok) return { status: 'tampered', reason: 'signature-invalid' };
+    return { status: 'valid', passport: parsed, warnings: [] };
+  }
+
   const { signature } = await signPayload(body);
   if (signature !== parsed.signature) {
     return { status: 'tampered', reason: 'checksum-mismatch' };
@@ -611,7 +854,20 @@ function normaliseStored(value: unknown): StoredPassport | null {
   if (typeof candidate.payload !== 'string' || typeof candidate.profileId !== 'string') {
     return null;
   }
-  if (!candidate.payload.startsWith(PAYLOAD_PREFIX)) return null;
+  if (
+    !candidate.payload.startsWith('TIKAPASS1') &&
+    !candidate.payload.startsWith('TIKAPASS2') &&
+    !candidate.payload.startsWith('TIKAPASS3')
+  ) {
+    return null;
+  }
+
+  const algorithm: SignatureAlgorithm =
+    candidate.algorithm === 'ecdsa-p256'
+      ? 'ecdsa-p256'
+      : candidate.algorithm === 'fnv1a-32'
+        ? 'fnv1a-32'
+        : 'hmac-sha256';
 
   return {
     id: typeof candidate.id === 'string' ? candidate.id : createId('passport'),
@@ -621,7 +877,7 @@ function normaliseStored(value: unknown): StoredPassport | null {
     issuedAt:
       typeof candidate.issuedAt === 'string' ? candidate.issuedAt : new Date().toISOString(),
     payload: candidate.payload,
-    algorithm: candidate.algorithm === 'fnv1a-32' ? 'fnv1a-32' : 'hmac-sha256',
+    algorithm,
     ...(typeof candidate.svg === 'string' ? { svg: candidate.svg } : {}),
   };
 }

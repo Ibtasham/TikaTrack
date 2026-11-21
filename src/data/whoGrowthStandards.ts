@@ -112,3 +112,46 @@ export const WHO_HEIGHT_FOR_AGE: Record<WhoSex, readonly WhoReferencePoint[]> = 
 };
 
 export const WHO_MAX_MONTHS = 60;
+
+/**
+ * WHO Reference 2007 BMI-for-age (61–228 months / 5–19 years).
+ * Thresholds follow WHO SD cut-offs:
+ * - -2 SD (~2.3rd pct): thinness
+ * - +1 SD (~85th pct): overweight
+ * - +2 SD (~97.7th pct): obesity
+ */
+export interface WhoBmiReferencePoint {
+  month: number;
+  thinness: number;
+  median: number;
+  overweight: number;
+  obesity: number;
+}
+
+export const WHO_BMI_5_TO_19_AGE: Record<WhoSex, readonly WhoBmiReferencePoint[]> = {
+  male: [
+    { month: 61, thinness: 13.0, median: 15.3, overweight: 16.6, obesity: 18.3 },
+    { month: 72, thinness: 13.0, median: 15.3, overweight: 16.8, obesity: 18.5 },
+    { month: 96, thinness: 13.3, median: 15.7, overweight: 17.4, obesity: 19.7 },
+    { month: 120, thinness: 13.7, median: 16.4, overweight: 18.5, obesity: 21.4 },
+    { month: 144, thinness: 14.5, median: 17.5, overweight: 19.9, obesity: 23.6 },
+    { month: 168, thinness: 15.5, median: 19.0, overweight: 21.8, obesity: 25.9 },
+    { month: 192, thinness: 16.5, median: 20.5, overweight: 23.5, obesity: 27.9 },
+    { month: 216, thinness: 17.3, median: 21.7, overweight: 24.9, obesity: 29.2 },
+    { month: 228, thinness: 17.6, median: 22.2, overweight: 25.4, obesity: 29.7 },
+  ],
+  female: [
+    { month: 61, thinness: 12.7, median: 15.2, overweight: 16.9, obesity: 18.9 },
+    { month: 72, thinness: 12.7, median: 15.3, overweight: 17.0, obesity: 19.2 },
+    { month: 96, thinness: 12.9, median: 15.7, overweight: 17.7, obesity: 20.6 },
+    { month: 120, thinness: 13.5, median: 16.6, overweight: 19.0, obesity: 22.6 },
+    { month: 144, thinness: 14.4, median: 18.0, overweight: 20.8, obesity: 25.0 },
+    { month: 168, thinness: 15.4, median: 19.6, overweight: 22.7, obesity: 27.3 },
+    { month: 192, thinness: 16.2, median: 20.7, overweight: 24.1, obesity: 28.9 },
+    { month: 216, thinness: 16.4, median: 21.3, overweight: 24.8, obesity: 29.5 },
+    { month: 228, thinness: 16.5, median: 21.4, overweight: 25.0, obesity: 29.7 },
+  ],
+};
+
+export const WHO_5_TO_19_MAX_MONTHS = 228;
+

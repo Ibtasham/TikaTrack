@@ -77,6 +77,33 @@ export async function registerServiceWorker(
 }
 
 /**
+ * Ensure the service worker is registered and active for Web Push subscriptions
+ * in both development and production environments.
+ */
+export async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+
+  try {
+    const registration = await navigator.serviceWorker.register(serviceWorkerUrl(), {
+      scope: import.meta.env.BASE_URL,
+    });
+
+    if (registration.active) return registration;
+
+    const ready = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<ServiceWorkerRegistration>((resolve) =>
+        setTimeout(() => resolve(registration), 6000),
+      ),
+    ]);
+    return ready ?? registration;
+  } catch (error) {
+    console.warn('[sw] push worker registration failed', error);
+    return null;
+  }
+}
+
+/**
  * Ask the waiting worker to take over and reload once it controls the page.
  *
  * Resolves `true` when the reload was triggered. A 5 s watchdog covers hosts

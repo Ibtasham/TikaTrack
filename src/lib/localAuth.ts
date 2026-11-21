@@ -6,11 +6,10 @@
  * When Supabase *is* configured, `AuthContext` transparently switches to the
  * cloud adapter instead — the rest of the app never knows the difference.
  *
- * Passwords are never stored. They are salted and hashed with SHA-256 — Web
- * Crypto where available, the portable implementation in `lib/sha256` when it is
- * not (SubtleCrypto is missing outside a secure context, e.g. plain HTTP on a
- * clinic LAN). The digest only ever leaves the browser if the user turns on
- * Supabase sync themselves.
+ * Passwords are never stored. When Web Crypto SubtleCrypto is available, they are
+ * derived using salted PBKDF2-SHA256 (100,000 iterations). Outside secure contexts
+ * (e.g. plain HTTP on a clinic LAN), it falls back to salted portable SHA-256 and
+ * transparently upgrades stored accounts on the next sign-in in a secure context.
  */
 
 import { createId } from './id';
@@ -21,10 +20,15 @@ import type { UserProfile } from '../types/auth';
 const USERS_KEY = `${STORAGE_PREFIX}local-users`;
 const SESSION_KEY = `${STORAGE_PREFIX}local-session`;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_KDF_ID = 'pbkdf2-sha256-100000' as const;
+
+export type LocalPasswordKdf = typeof PBKDF2_KDF_ID | 'sha256';
 
 export interface StoredLocalUser extends UserProfile {
   passwordSalt: string;
   passwordHash: string;
+  passwordKdf?: LocalPasswordKdf;
 }
 
 export type LocalAuthErrorCode =
@@ -44,9 +48,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const MIN_PASSWORD_LENGTH = 8;
 
 function randomBytes(length: number): Uint8Array {
+  if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+    throw new Error('Cryptographic random number generator is unavailable.');
+  }
   const bytes = new Uint8Array(length);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
-  else for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  crypto.getRandomValues(bytes);
   return bytes;
 }
 
@@ -70,20 +76,67 @@ function saveUsers(users: StoredLocalUser[]): void {
 
 /** Strip secrets before handing a user object to the UI. */
 export function publicUser(user: StoredLocalUser): UserProfile {
-  const { passwordHash: _hash, passwordSalt: _salt, ...rest } = user;
+  const { passwordHash: _hash, passwordSalt: _salt, passwordKdf: _kdf, ...rest } = user;
   return rest;
 }
 
 /**
  * Salted SHA-256 digest of a password.
- *
- * Always resolves to a real digest: when SubtleCrypto is unavailable the
- * portable implementation is used, so an account created on an insecure origin
- * can still be signed into. (The old `null` return silently stored a random
- * hash instead, which made sign-in permanently impossible.)
  */
 export async function hashPassword(password: string, salt: string): Promise<string> {
   return sha256HexAsync(`${salt}:${password}`);
+}
+
+function hasPbkdf2Support(): boolean {
+  return (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.subtle?.importKey === 'function' &&
+    typeof crypto.subtle?.deriveBits === 'function'
+  );
+}
+
+async function derivePbkdf2Hash(password: string, salt: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(`${salt}:tikatrack-v1`),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    256,
+  );
+  return toHex(new Uint8Array(bits));
+}
+
+async function deriveStoredPassword(
+  password: string,
+  salt: string,
+): Promise<{ passwordHash: string; passwordKdf: LocalPasswordKdf }> {
+  if (hasPbkdf2Support()) {
+    const passwordHash = await derivePbkdf2Hash(password, salt);
+    return { passwordHash, passwordKdf: PBKDF2_KDF_ID };
+  }
+  const passwordHash = await hashPassword(password, salt);
+  return { passwordHash, passwordKdf: 'sha256' };
+}
+
+async function verifyStoredPassword(password: string, user: StoredLocalUser): Promise<boolean> {
+  if (user.passwordKdf === PBKDF2_KDF_ID) {
+    if (!hasPbkdf2Support()) return false;
+    const candidate = await derivePbkdf2Hash(password, user.passwordSalt);
+    return safeEqual(candidate, user.passwordHash);
+  }
+  const digest = await hashPassword(password, user.passwordSalt);
+  return safeEqual(digest, user.passwordHash);
 }
 
 export function validateEmail(email: string): boolean {
@@ -129,7 +182,7 @@ export async function localSignUp(
   }
 
   const salt = toHex(randomBytes(16));
-  const passwordHash = await hashPassword(password, salt);
+  const { passwordHash, passwordKdf } = await deriveStoredPassword(password, salt);
   const now = new Date().toISOString();
 
   const stored: StoredLocalUser = {
@@ -142,6 +195,7 @@ export async function localSignUp(
     updated_at: now,
     passwordSalt: salt,
     passwordHash,
+    passwordKdf,
   };
 
   users.push(stored);
@@ -153,16 +207,31 @@ export async function localSignUp(
 export async function localSignIn(email: string, password: string): Promise<LocalAuthResult> {
   const normalised = email.trim().toLowerCase();
   const users = loadUsers();
-  const match = users.find((user) => user.email === normalised);
-  if (!match) return { user: null, error: 'invalid-credentials' };
+  const index = users.findIndex((user) => user.email === normalised);
+  if (index === -1) return { user: null, error: 'invalid-credentials' };
 
-  const digest = await hashPassword(password, match.passwordSalt);
-  if (!safeEqual(digest, match.passwordHash)) {
+  const match = users[index];
+  const valid = await verifyStoredPassword(password, match);
+  if (!valid) {
     return { user: null, error: 'invalid-credentials' };
   }
 
+  // Transparently upgrade legacy SHA-256 credentials to PBKDF2-SHA256 when SubtleCrypto is available.
+  if (match.passwordKdf !== PBKDF2_KDF_ID && hasPbkdf2Support()) {
+    const freshSalt = toHex(randomBytes(16));
+    const upgraded = await deriveStoredPassword(password, freshSalt);
+    users[index] = {
+      ...match,
+      passwordSalt: freshSalt,
+      passwordHash: upgraded.passwordHash,
+      passwordKdf: upgraded.passwordKdf,
+      updated_at: new Date().toISOString(),
+    };
+    saveUsers(users);
+  }
+
   writeSession(match.id);
-  return { user: publicUser(match), error: null };
+  return { user: publicUser(users[index]), error: null };
 }
 
 interface StoredSession {
@@ -216,17 +285,18 @@ export async function localChangePassword(
   if (newPassword.length < MIN_PASSWORD_LENGTH) return { user: null, error: 'weak-password' };
 
   const existing = users[index];
-  const digest = await hashPassword(currentPassword, existing.passwordSalt);
-  if (!safeEqual(digest, existing.passwordHash)) {
+  const valid = await verifyStoredPassword(currentPassword, existing);
+  if (!valid) {
     return { user: null, error: 'invalid-credentials' };
   }
 
   const salt = toHex(randomBytes(16));
-  const passwordHash = await hashPassword(newPassword, salt);
+  const { passwordHash, passwordKdf } = await deriveStoredPassword(newPassword, salt);
   users[index] = {
     ...existing,
     passwordSalt: salt,
     passwordHash,
+    passwordKdf,
     updated_at: new Date().toISOString(),
   };
   saveUsers(users);

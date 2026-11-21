@@ -31,6 +31,11 @@ import {
   type DoseInputError,
   type NewDoseEventInput,
 } from './doseLedger';
+import {
+  isValidISODate,
+  resolveReferenceTodayISO,
+  type CalendarDateOptions,
+} from './format';
 import { createProfileId } from './id';
 import {
   buildGrowthMeasurement,
@@ -52,7 +57,6 @@ import {
   type VaccinationEvent,
 } from '../types';
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const VACCINE_ID = /^[a-z0-9_-]{1,64}$/i;
 
 /** Coerce anything found in storage into a valid `DoseRecord`, or `null`. */
@@ -61,7 +65,7 @@ export function normaliseDoseRecord(value: unknown): DoseRecord | null {
   // Honour it instead of dropping the dose on import.
   if (typeof value === 'string') {
     const date = value.slice(0, 10);
-    return ISO_DATE.test(date) ? { date } : null;
+    return isValidISODate(date) ? { date } : null;
   }
 
   if (!value || typeof value !== 'object') return null;
@@ -70,7 +74,7 @@ export function normaliseDoseRecord(value: unknown): DoseRecord | null {
   // v2 exports store an object: `{ "bcg": { "date": "2024-01-05" } }`.
   if (typeof candidate.date === 'string') {
     const date = candidate.date.slice(0, 10);
-    if (!ISO_DATE.test(date)) return null;
+    if (!isValidISODate(date)) return null;
     const record: DoseRecord = { date };
     if (typeof candidate.notes === 'string' && candidate.notes.trim()) {
       record.notes = candidate.notes.trim().slice(0, 500);
@@ -110,8 +114,7 @@ export function normaliseProfile(value: unknown, now?: string): Profile | null {
   const name = typeof candidate.name === 'string' ? candidate.name.trim().slice(0, 120) : '';
   const dateOfBirth =
     typeof candidate.dateOfBirth === 'string' ? candidate.dateOfBirth.slice(0, 10) : '';
-  if (!name || !ISO_DATE.test(dateOfBirth)) return null;
-  if (Number.isNaN(Date.parse(dateOfBirth))) return null;
+  if (!name || !isValidISODate(dateOfBirth)) return null;
 
   const records: Record<string, DoseRecord> = {};
   if (candidate.records && typeof candidate.records === 'object') {
@@ -248,17 +251,17 @@ export interface CreateProfileResult {
 }
 
 /** Validate + build a brand new profile. */
-export function createProfile(input: NewProfileInput): CreateProfileResult {
+export function createProfile(
+  input: NewProfileInput,
+  dateOptions: CalendarDateOptions = {},
+): CreateProfileResult {
   const name = input.name.trim();
   if (!name) return { error: 'empty-name' };
   if (name.length > 120) return { error: 'name-too-long' };
   if (!input.dateOfBirth) return { error: 'missing-dob' };
-  if (!ISO_DATE.test(input.dateOfBirth)) return { error: 'invalid-dob' };
-
-  const dob = Date.parse(input.dateOfBirth);
-  if (Number.isNaN(dob)) return { error: 'invalid-dob' };
-  // Allow "today" but nothing in the future (a due date is not a birth date).
-  if (dob > Date.now() + 24 * 60 * 60 * 1000) return { error: 'future-dob' };
+  if (!isValidISODate(input.dateOfBirth)) return { error: 'invalid-dob' };
+  // Allow "today" (in local or configured timezone) but nothing in the future.
+  if (input.dateOfBirth > resolveReferenceTodayISO(dateOptions)) return { error: 'future-dob' };
 
   const now = new Date().toISOString();
   const profile: Profile = {
@@ -347,8 +350,9 @@ export function recordDoseEvent(
   profileId: string,
   input: NewDoseEventInput,
   now = new Date().toISOString(),
+  dateOptions: CalendarDateOptions = {},
 ): RecordDoseResult {
-  const built = buildEvent(profileId, input, now);
+  const built = buildEvent(profileId, input, now, dateOptions);
   if (!built.event) return { profiles, error: built.error };
   const event = built.event;
   return {
@@ -476,6 +480,42 @@ export function addGrowthMeasurement(
   const next = profiles.map((profile) => {
     if (profile.id !== profileId) return profile;
     const growth = sortGrowthMeasurements([...(profile.growth ?? []), entry]);
+    return { ...profile, growth, updatedAt: now };
+  });
+  return { profiles: next, measurement: entry };
+}
+
+/** Update an existing height/weight measurement by id. */
+export function updateGrowthMeasurement(
+  profiles: Profile[],
+  profileId: string,
+  measurementId: string,
+  input: NewGrowthInput,
+  now = new Date().toISOString(),
+): AddGrowthResult {
+  const target = profiles.find((profile) => profile.id === profileId);
+  if (!target) return { profiles, error: 'missing-date' };
+
+  const existing = (target.growth ?? []).find((item) => item.id === measurementId);
+  if (!existing) return { profiles, error: 'missing-date' };
+
+  const built = buildGrowthMeasurement(
+    target.dateOfBirth,
+    {
+      ...input,
+      id: existing.id,
+      createdAt: existing.createdAt,
+    },
+    now,
+  );
+  if (!built.measurement) return { profiles, error: built.error };
+
+  const entry = built.measurement;
+  const next = profiles.map((profile) => {
+    if (profile.id !== profileId) return profile;
+    const growth = sortGrowthMeasurements(
+      (profile.growth ?? []).map((item) => (item.id === measurementId ? entry : item)),
+    );
     return { ...profile, growth, updatedAt: now };
   });
   return { profiles: next, measurement: entry };

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { CalendarPlus, Printer, Share2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CalendarPlus, FileText, Printer, Share2 } from 'lucide-react';
 
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
@@ -8,18 +8,21 @@ import { printEpiCard, type EpiCardRow } from '../lib/epiCard';
 import { formatAge, formatDate, todayISO } from '../lib/format';
 import { downloadICS, eventUid, type CalendarEvent } from '../lib/ics';
 import { reminderAlarmOffsets } from '../lib/intelligentReminders';
+import {
+  buildPassportCardData,
+  ensurePassportForProfile,
+  exportPassportAsPdf,
+} from '../lib/passportExport';
 import { relativeDays } from '../lib/botContext';
 import { appUrl, buildRecordShareText, safeFilename, share, shareOutcomeKey } from '../lib/share';
 import { generatePersonalizedSchedule, milestoneDoseName } from '../lib/smartScheduler';
 import type { Profile } from '../types';
 
 /**
- * What a family can *do* with one member's record: put the remaining doses in
- * their phone calendar, send a summary to whoever is taking the child to the
- * centre, and print the paper card a health worker can read.
- *
- * All three are derived from the same schedule the rest of the app shows, so
- * they cannot disagree with the tracker.
+ * What a family can *do* with one member's record: download a printable PDF
+ * vaccination passport with a signed QR code, put the remaining doses in their
+ * phone calendar, send a summary to whoever is taking the child to the centre,
+ * and print the paper card a health worker can read.
  */
 export function MemberActions({
   profile,
@@ -31,6 +34,7 @@ export function MemberActions({
   const { t, language } = useI18n();
   const toast = useToast();
   const isBangla = language === 'bn';
+  const [downloadingPassport, setDownloadingPassport] = useState(false);
 
   const rows = useMemo(
     // The whole profile: `records` is the legacy one-slot projection and would
@@ -63,6 +67,28 @@ export function MemberActions({
     .sort((a, b) => a.dose.daysUntilDue - b.dose.daysUntilDue);
 
   const alarmOffsets = useMemo(() => reminderAlarmOffsets(), []);
+
+  const handleDownloadPassport = async () => {
+    setDownloadingPassport(true);
+    try {
+      const passport = await ensurePassportForProfile(profile);
+      if (!passport) {
+        toast.error(t('common.status.error'));
+        return;
+      }
+      const cardData = buildPassportCardData({
+        passport,
+        profile,
+        language,
+      });
+      await exportPassportAsPdf(cardData);
+      toast.success(t('tracker.passport.download'));
+    } catch {
+      toast.error(t('common.status.error'));
+    } finally {
+      setDownloadingPassport(false);
+    }
+  };
 
   const handleCalendar = () => {
     if (pending.length === 0) {
@@ -174,7 +200,20 @@ export function MemberActions({
     <div className={`flex flex-wrap gap-2 ${className}`}>
       <button
         type="button"
-        className="btn-secondary btn-sm"
+        className="btn-primary btn-sm whitespace-nowrap shrink-0"
+        disabled={downloadingPassport}
+        onClick={() => void handleDownloadPassport()}
+        title={t('tracker.passport.title')}
+      >
+        <FileText className="h-4 w-4" aria-hidden="true" />
+        <span className={isBangla ? 'font-bangla' : undefined}>
+          {downloadingPassport ? t('common.status.loading') : t('tracker.passport.download')}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        className="btn-secondary btn-sm whitespace-nowrap shrink-0"
         onClick={handleCalendar}
         title={t('tracker.calendar.title')}
       >
@@ -184,7 +223,7 @@ export function MemberActions({
 
       <button
         type="button"
-        className="btn-secondary btn-sm"
+        className="btn-secondary btn-sm whitespace-nowrap shrink-0"
         onClick={() => void handleShare()}
         title={t('tracker.share.title')}
       >
@@ -194,7 +233,7 @@ export function MemberActions({
 
       <button
         type="button"
-        className="btn-ghost btn-sm"
+        className="btn-ghost btn-sm whitespace-nowrap shrink-0"
         onClick={handlePrintCard}
         title={t('tracker.card.title')}
       >

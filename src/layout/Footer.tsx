@@ -14,6 +14,7 @@ const PRODUCT_LINKS = [
 ] as const;
 
 const RESOURCE_LINKS = [
+  { to: '/readiness', labelKey: 'nav.readiness' },
   { to: '/tikabot', labelKey: 'nav.tikabot' },
   { to: '/reminders', labelKey: 'nav.reminders' },
   { to: '/compare', labelKey: 'nav.compare' },

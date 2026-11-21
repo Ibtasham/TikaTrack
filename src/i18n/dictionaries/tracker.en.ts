@@ -203,7 +203,7 @@ export const en: TranslationDictionary = {
     'Some of these may already have been given — the records need confirming.',
   'tracker.add.error.empty-name': 'Please enter a name.',
   'tracker.add.error.missing-dob': 'Please enter a date of birth.',
-  'tracker.add.error.invalid-dob': 'That date of birth could not be read.',
+  'tracker.add.error.invalid-dob': 'Please enter a valid calendar date of birth.',
   'tracker.add.error.future-dob': 'Date of birth cannot be in the future.',
   'tracker.add.error.name-too-long': 'That name is too long.',
   'tracker.import.doses': '{0} new dose(s), {1} updated, {2} already on this device.',
@@ -231,4 +231,39 @@ export const en: TranslationDictionary = {
   'tracker.care.urgentBody':
     'Fever goes above 39°C (102°F), inconsolable crying lasts 3+ hours, breathing becomes difficult, face or lips swell, or seizures / sudden limpness occur.',
   'tracker.growth': 'Growth & WHO',
+  'tracker.passport.download': 'Download Vaccination Passport',
+  'tracker.passport.title': 'Generate a printable PDF vaccination passport with QR code',
+  'tracker.dose.warn.beforeDob':
+    'Warning: {0} is earlier than the birth date ({1}). You can still save if needed, or adjust the date.',
+  'tracker.dose.warn.exactDuplicate':
+    'Warning: an entry for {0} on {1} is already recorded. Saving will add a duplicate visit entry.',
+  'tracker.dose.warn.chronology':
+    'Chronology note: {0} is dated earlier than a preceding recorded dose ({1}). Please double-check the paper card.',
+  'tracker.dose.anomaly.beforeDob': 'Date is before birth date — verify and correct.',
+  'tracker.dose.anomaly.chronology': 'Dated earlier than a previous dose in this series.',
+  'tracker.intelligence.title': 'Schedule Intelligence & Clinical Limitations',
+  'tracker.intelligence.subtitle':
+    'Reference date {0} ({1}) · Every milestone is derived from birth date and individual dose records.',
+  'tracker.intelligence.dueProgress': 'Due-to-date progress',
+  'tracker.intelligence.dueProgressRatio': '{0} of {1} age-eligible doses completed',
+  'tracker.intelligence.confirmedVsProvisional': '{0} exact-dose · {1} unconfirmed slot(s)',
+  'tracker.intelligence.bucketCompleted': 'Completed',
+  'tracker.intelligence.bucketCompletedDetail': '{0} verified dose number(s), {1} provisional match(es)',
+  'tracker.intelligence.bucketUpcoming': 'Upcoming',
+  'tracker.intelligence.bucketUpcomingDetail': '{0} due today · {1} scheduled later',
+  'tracker.intelligence.bucketOverdue': 'Potentially overdue',
+  'tracker.intelligence.bucketOverdueDetail': 'No auto-catch-up interval (consult EPI clinic)',
+  'tracker.intelligence.bucketUncertain': 'Uncertain / anomalies',
+  'tracker.intelligence.bucketUncertainDetail': '{0} history anomaly item(s) · {1} off-schedule entry/entries',
+  'tracker.intelligence.bucketHcw': 'Healthcare-worker review',
+  'tracker.intelligence.bucketHcwDetail': '{0} item(s) requiring clinical confirmation',
+  'tracker.intelligence.limitationsTitle': 'Scheduling boundaries & unresolved evidence (C-005 / C-006)',
+  'tracker.intelligence.toggleDetails': 'Show clinical breakdown',
+  'tracker.intelligence.hideDetails': 'Hide clinical breakdown',
+  'tracker.intelligence.hcwListTitle': 'Items requiring healthcare-worker review',
+  'tracker.intelligence.anomalyListTitle': 'Record anomalies detected',
+  'tracker.intelligence.noIssues': 'No timing conflicts, uncertain records, or overdue doses flagged.',
+  'tracker.catchUp.olderAgeNote':
+    'Age 7+ years check: ask an EPI health worker whether pediatric catch-up doses still apply.',
 };
+

@@ -8,7 +8,7 @@
 
 import { allVaccines } from '../vaccines';
 import { bridgeFor, isPublishable, legacyBridge, nationalProgrammeIds, programmeFor } from './bridge';
-import { conflicts, conflictsFor, getConflict, OPEN_CONFLICT_COUNT } from './conflicts';
+import { conflicts, conflictsFor, getConflict, OPEN_CONFLICT_COUNT, RESOLVED_CONFLICT_COUNT } from './conflicts';
 import {
   claimsOf,
   getRecord,
@@ -21,6 +21,7 @@ import {
 import {
   getSource,
   hasSource,
+  isSufficientForBackgroundClaim,
   isSufficientForClinicalClaim,
   isSufficientForProgrammeFact,
   sourceRegistry,
@@ -40,7 +41,7 @@ import type {
 import { KNOWLEDGE_SCHEMA_VERSION } from './types';
 
 /** Version of the knowledge base as a whole. Bumped in `docs/DATA-CHANGELOG.md`. */
-export const KNOWLEDGE_BASE_VERSION = '3.0.0-alpha.1';
+export const KNOWLEDGE_BASE_VERSION = '3.1.0';
 
 export {
   KNOWLEDGE_SCHEMA_VERSION,
@@ -50,6 +51,7 @@ export {
   conflictsFor,
   getConflict,
   OPEN_CONFLICT_COUNT,
+  RESOLVED_CONFLICT_COUNT,
   claimsOf,
   getRecord,
   getRecordByLegacyId,
@@ -62,6 +64,7 @@ export {
   programmeFor,
   getSource,
   hasSource,
+  isSufficientForBackgroundClaim,
   isSufficientForClinicalClaim,
   isSufficientForProgrammeFact,
   sourceRegistry,
@@ -150,6 +153,7 @@ export function knowledgeBaseFacts() {
       isSufficientForClinicalClaim(source.id),
     ).length,
     openConflicts: OPEN_CONFLICT_COUNT,
+    resolvedConflicts: RESOLVED_CONFLICT_COUNT,
     entriesAwaitingReview: awaitingReview,
     nationalProgrammeAntigens: nationalProgrammeIds().length,
     lastReviewed: REVIEW_DATE,

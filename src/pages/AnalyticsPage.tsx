@@ -26,7 +26,7 @@ import {
   YAxis,
 } from 'recharts';
 
-import { ChildGrowthChart } from '../components/ChildGrowthChart';
+import { ChildGrowthTracker } from '../components/ChildGrowthTracker';
 import { PageSkeleton } from '../components/Skeleton';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
@@ -311,6 +311,14 @@ export default function AnalyticsPage() {
         </button>
       </div>
 
+      <p
+        className={`mt-3 text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+      >
+        {memberFilter !== 'all' && scoped[0]
+          ? t('analytics.scope.member', scoped[0].name)
+          : t('analytics.scope.family', localiseNumber(profiles.length, language))}
+      </p>
+
       <div ref={printRef} className="print-area">
         {/* --- Stat cards -------------------------------------------------- */}
         <dl className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -510,7 +518,7 @@ export default function AnalyticsPage() {
 
         {/* --- Child Growth & WHO Standards ------------------------------- */}
         <div className="mt-5">
-          <ChildGrowthChart
+          <ChildGrowthTracker
             preferredProfileId={memberFilter !== 'all' ? memberFilter : undefined}
           />
         </div>

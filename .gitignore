@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+.tikatrack-vapid.json
+.tikatrack-push-store.json

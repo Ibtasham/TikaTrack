@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -23,6 +24,7 @@ import {
   resolveDoseReview as resolveDoseReviewIn,
   reviewQueue,
   updateDoseEvent as updateDoseEventIn,
+  updateGrowthMeasurement as updateGrowthMeasurementIn,
   type AddGrowthResult,
   type NewProfileInput,
   type CreateProfileResult,
@@ -31,7 +33,43 @@ import {
 } from '../lib/profileStore';
 import type { DoseEventPatch, DoseHistory, NewDoseEventInput } from '../lib/doseLedger';
 import type { NewGrowthInput } from '../lib/whoGrowth';
-import { LEGACY_STORAGE_KEYS, readJSONWithLegacy, STORAGE_KEYS, writeJSON } from '../lib/storage';
+import {
+  LEGACY_STORAGE_KEYS,
+  readJSON,
+  readJSONWithLegacy,
+  STORAGE_KEYS,
+  STORAGE_PREFIX,
+  writeJSON,
+} from '../lib/storage';
+import {
+  MAX_FIRESTORE_ARRAY_ITEMS,
+  mergeCloudAndLocalProfiles,
+} from '../lib/cloudProfileMapper';
+import { useOptionalAuth } from './AuthContext';
+import {
+  deleteProfileFromCloudSql,
+  deleteProfileFromFirestore,
+  fetchFirestoreProfiles,
+  pushProfilesToCloudSql,
+  pushProfilesToFirestore,
+  subscribeFirestoreProfiles,
+  syncSessionWithCloudSql,
+} from '../services/cloudSync';
+import { syncWebPushSchedule } from '../lib/pushClient';
+
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+
+const DELETED_TOMBSTONES_KEY = `${STORAGE_PREFIX}deleted-profiles`;
+
+function loadTombstones(): string[] {
+  const raw = readJSON<unknown>(DELETED_TOMBSTONES_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string' && v.length > 0).slice(-200);
+}
+
+function saveTombstones(ids: string[]): void {
+  writeJSON(DELETED_TOMBSTONES_KEY, [...new Set(ids)].slice(-200));
+}
 
 interface ProfilesContextValue {
   profiles: Profile[];
@@ -39,6 +77,10 @@ interface ProfilesContextValue {
   ready: boolean;
   /** `false` when localStorage is unavailable (private mode) — data is in-memory only. */
   persistent: boolean;
+  syncStatus: SyncStatus;
+  lastSyncedAt: string | null;
+  storageWarning: string | null;
+  syncNow: () => Promise<void>;
   addProfile: (input: NewProfileInput) => CreateProfileResult;
   updateProfile: (id: string, patch: Partial<Omit<Profile, 'id' | 'records' | 'events'>>) => void;
   deleteProfile: (id: string) => void;
@@ -61,6 +103,12 @@ interface ProfilesContextValue {
   removeVaccineHistory: (profileId: string, vaccineId: string) => void;
   /** Append one validated height/weight measurement to a member's growth log. */
   addGrowthMeasurement: (profileId: string, input: NewGrowthInput) => AddGrowthResult;
+  /** Correct an existing height/weight measurement by id. */
+  updateGrowthMeasurement: (
+    profileId: string,
+    measurementId: string,
+    input: NewGrowthInput,
+  ) => AddGrowthResult;
   /** Remove one height/weight measurement by id. */
   removeGrowthMeasurement: (profileId: string, measurementId: string) => void;
   replaceAll: (next: Profile[]) => void;
@@ -75,9 +123,32 @@ interface ProfilesContextValue {
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
 
 export function ProfilesProvider({ children }: { children: ReactNode }) {
+  const auth = useOptionalAuth();
+  const firebaseUser = auth?.firebaseUser ?? null;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [ready, setReady] = useState(false);
   const [persistent, setPersistent] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  const profilesRef = useRef<Profile[]>(profiles);
+  profilesRef.current = profiles;
+
+  const suppressPushRef = useRef(false);
+  const pushTimerRef = useRef<number | null>(null);
+  const tombstonesRef = useRef<string[]>(loadTombstones());
+  const knownCloudIdsRef = useRef<Set<string>>(new Set());
+
+  const storageWarning = useMemo(() => {
+    const overloaded = profiles.find(
+      (p) =>
+        (p.events?.length ?? 0) > MAX_FIRESTORE_ARRAY_ITEMS ||
+        (p.growth?.length ?? 0) > MAX_FIRESTORE_ARRAY_ITEMS,
+    );
+    return overloaded
+      ? `${overloaded.name} has exceeded the ${MAX_FIRESTORE_ARRAY_ITEMS}-entry cloud sync limit per record.`
+      : null;
+  }, [profiles]);
 
   // Hydrate once, migrating the v1 key and any 2.x profile shape if needed.
   useEffect(() => {
@@ -86,7 +157,11 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       LEGACY_STORAGE_KEYS.profiles,
       null,
     );
-    setProfiles(stored === null ? [] : normaliseProfiles(stored));
+    const loaded = stored === null ? [] : normaliseProfiles(stored);
+    const tombstones = new Set(tombstonesRef.current);
+    const filtered = tombstones.size > 0 ? loaded.filter((p) => !tombstones.has(p.id)) : loaded;
+    profilesRef.current = filtered;
+    setProfiles(filtered);
     setReady(true);
   }, []);
 
@@ -100,105 +175,323 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   // Keep multiple tabs in sync.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
+      if (event.key === DELETED_TOMBSTONES_KEY) {
+        tombstonesRef.current = loadTombstones();
+        const deleted = new Set(tombstonesRef.current);
+        setProfiles((current) => {
+          const next = current.filter((p) => !deleted.has(p.id));
+          profilesRef.current = next;
+          return next;
+        });
+        return;
+      }
       if (event.key !== STORAGE_KEYS.profiles && event.key !== LEGACY_STORAGE_KEYS.profiles) return;
-      setProfiles(normaliseProfiles(event.newValue ? safeParse(event.newValue) : []));
+      const next = normaliseProfiles(event.newValue ? safeParse(event.newValue) : []);
+      profilesRef.current = next;
+      setProfiles(next);
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  const syncNow = useCallback(async () => {
+    if (!firebaseUser || import.meta.env.MODE === 'test') return;
+    setSyncStatus('syncing');
+    try {
+      const tombstones = tombstonesRef.current;
+      const [sqlRes, fsProfiles] = await Promise.all([
+        syncSessionWithCloudSql(firebaseUser, profilesRef.current, tombstones),
+        fetchFirestoreProfiles(firebaseUser.uid).catch(() => [] as Profile[]),
+      ]);
+
+      // Delete tombstoned docs remotely if still lingering in Firestore
+      if (tombstones.length > 0 && fsProfiles.length > 0) {
+        const fsIds = new Set(fsProfiles.map((p) => p.id));
+        await Promise.all(
+          tombstones
+            .filter((id) => fsIds.has(id))
+            .map((id) => deleteProfileFromFirestore(firebaseUser.uid, id).catch(() => undefined)),
+        );
+      }
+
+      const combined = mergeCloudAndLocalProfiles(sqlRes.profiles, fsProfiles, tombstones);
+      knownCloudIdsRef.current = new Set(combined.map((p) => p.id));
+      suppressPushRef.current = true;
+      profilesRef.current = combined;
+      setProfiles(combined);
+      await Promise.all([
+        pushProfilesToCloudSql(firebaseUser, combined),
+        pushProfilesToFirestore(firebaseUser.uid, combined),
+      ]);
+
+      // Clear tombstones that are confirmed absent from both remote sources
+      const sqlIds = new Set(sqlRes.profiles.map((p) => p.id));
+      const fsIdsAfter = new Set(fsProfiles.map((p) => p.id));
+      const remainingTombstones = tombstones.filter((id) => sqlIds.has(id) || fsIdsAfter.has(id));
+      tombstonesRef.current = remainingTombstones;
+      saveTombstones(remainingTombstones);
+
+      setLastSyncedAt(new Date().toISOString());
+      setSyncStatus('synced');
+    } catch (error) {
+      console.error('Cloud sync failed:', error);
+      setSyncStatus('error');
+    } finally {
+      window.setTimeout(() => {
+        suppressPushRef.current = false;
+      }, 250);
+    }
+  }, [firebaseUser]);
+
+  // Initial merge + realtime Firestore listener when signed in with Google/Firebase.
+  useEffect(() => {
+    if (!ready || !firebaseUser || import.meta.env.MODE === 'test') {
+      if (!firebaseUser) {
+        knownCloudIdsRef.current = new Set();
+        setSyncStatus('idle');
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void syncNow();
+
+    const unsubscribe = subscribeFirestoreProfiles(
+      firebaseUser.uid,
+      (remoteProfiles) => {
+        if (cancelled) return;
+        const remoteIds = new Set(remoteProfiles.map((p) => p.id));
+        const deletedRemotely = [...knownCloudIdsRef.current].filter((id) => !remoteIds.has(id));
+        knownCloudIdsRef.current = remoteIds;
+
+        if (deletedRemotely.length > 0) {
+          tombstonesRef.current = [...new Set([...tombstonesRef.current, ...deletedRemotely])].slice(-200);
+          saveTombstones(tombstonesRef.current);
+        }
+
+        const merged = mergeCloudAndLocalProfiles(
+          profilesRef.current,
+          remoteProfiles,
+          tombstonesRef.current,
+        );
+        if (JSON.stringify(merged) !== JSON.stringify(profilesRef.current)) {
+          suppressPushRef.current = true;
+          profilesRef.current = merged;
+          setProfiles(merged);
+          window.setTimeout(() => {
+            suppressPushRef.current = false;
+          }, 250);
+        }
+      },
+      () => {
+        /* non-fatal listener error */
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [firebaseUser, ready, syncNow]);
+
+  // Debounced background push to Cloud SQL + Firestore whenever local profiles mutate while authenticated.
+  useEffect(() => {
+    if (!ready || !firebaseUser || suppressPushRef.current || import.meta.env.MODE === 'test') {
+      return;
+    }
+    if (pushTimerRef.current !== null) {
+      window.clearTimeout(pushTimerRef.current);
+    }
+    pushTimerRef.current = window.setTimeout(() => {
+      setSyncStatus('syncing');
+      void Promise.all([
+        pushProfilesToCloudSql(firebaseUser, profiles),
+        pushProfilesToFirestore(firebaseUser.uid, profiles),
+      ])
+        .then(() => {
+          setLastSyncedAt(new Date().toISOString());
+          setSyncStatus('synced');
+        })
+        .catch(() => {
+          setSyncStatus('error');
+        });
+    }, 650);
+
+    return () => {
+      if (pushTimerRef.current !== null) {
+        window.clearTimeout(pushTimerRef.current);
+      }
+    };
+  }, [profiles, ready, firebaseUser]);
+
+  // Keep active Web Push 48-hour reminder queue synced when family records change.
+  useEffect(() => {
+    if (!ready || import.meta.env.MODE === 'test') return;
+    const timer = window.setTimeout(() => {
+      const lang = localStorage.getItem(STORAGE_KEYS.language) === 'bn' ? 'bn' : 'en';
+      void syncWebPushSchedule({
+        profiles,
+        language: lang,
+        firebaseUser,
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [profiles, ready, firebaseUser]);
+
   const addProfile = useCallback((input: NewProfileInput): CreateProfileResult => {
     const result = createProfile(input);
     if (result.profile) {
       const created = result.profile;
-      setProfiles((current) => [...current, created]);
+      const next = [...profilesRef.current, created];
+      profilesRef.current = next;
+      setProfiles(next);
     }
     return result;
   }, []);
 
   const updateProfile = useCallback(
     (id: string, patch: Partial<Omit<Profile, 'id' | 'records' | 'events'>>) => {
-      setProfiles((current) =>
-        current.map((profile) =>
-          profile.id === id
-            ? { ...profile, ...patch, updatedAt: new Date().toISOString() }
-            : profile,
-        ),
+      const next = profilesRef.current.map((profile) =>
+        profile.id === id
+          ? { ...profile, ...patch, updatedAt: new Date().toISOString() }
+          : profile,
       );
+      profilesRef.current = next;
+      setProfiles(next);
     },
     [],
   );
 
-  const deleteProfile = useCallback((id: string) => {
-    setProfiles((current) => current.filter((profile) => profile.id !== id));
-  }, []);
+  const deleteProfile = useCallback(
+    (id: string) => {
+      tombstonesRef.current = [...new Set([...tombstonesRef.current, id])].slice(-200);
+      saveTombstones(tombstonesRef.current);
+      knownCloudIdsRef.current.delete(id);
+      const next = profilesRef.current.filter((profile) => profile.id !== id);
+      profilesRef.current = next;
+      setProfiles(next);
+      if (firebaseUser && import.meta.env.MODE !== 'test') {
+        void Promise.all([
+          deleteProfileFromCloudSql(firebaseUser, id),
+          deleteProfileFromFirestore(firebaseUser.uid, id),
+        ]).catch(() => {
+          /* non-fatal background deletion */
+        });
+      }
+    },
+    [firebaseUser],
+  );
 
   const recordDoseEvent = useCallback(
     (profileId: string, input: NewDoseEventInput): RecordDoseResult => {
-      let result: RecordDoseResult = { profiles: [], error: 'missing-vaccine' };
-      setProfiles((current) => {
-        result = recordDoseEventIn(current, profileId, input);
-        return result.error ? current : result.profiles;
-      });
+      const result = recordDoseEventIn(profilesRef.current, profileId, input);
+      if (!result.error) {
+        profilesRef.current = result.profiles;
+        setProfiles(result.profiles);
+      }
       return result;
     },
     [],
   );
 
   const recordDose = useCallback((profileId: string, vaccineId: string, dose: DoseRecord) => {
-    setProfiles((current) => recordDoseIn(current, profileId, vaccineId, dose));
+    const next = recordDoseIn(profilesRef.current, profileId, vaccineId, dose);
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
   const updateDoseEvent = useCallback(
     (profileId: string, eventId: string, patch: DoseEventPatch) => {
-      setProfiles((current) => updateDoseEventIn(current, profileId, eventId, patch));
+      const next = updateDoseEventIn(profilesRef.current, profileId, eventId, patch);
+      profilesRef.current = next;
+      setProfiles(next);
     },
     [],
   );
 
   const resolveDoseReview = useCallback(
     (profileId: string, eventId: string, doseNumber: number | null) => {
-      setProfiles((current) => resolveDoseReviewIn(current, profileId, eventId, doseNumber));
+      const next = resolveDoseReviewIn(profilesRef.current, profileId, eventId, doseNumber);
+      profilesRef.current = next;
+      setProfiles(next);
     },
     [],
   );
 
   const removeDoseEvent = useCallback((profileId: string, eventId: string) => {
-    setProfiles((current) => removeDoseEventIn(current, profileId, eventId));
+    const next = removeDoseEventIn(profilesRef.current, profileId, eventId);
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
   const removeDose = useCallback((profileId: string, vaccineId: string, eventId: string) => {
-    setProfiles((current) => removeDoseIn(current, profileId, vaccineId, eventId));
+    const next = removeDoseIn(profilesRef.current, profileId, vaccineId, eventId);
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
   const removeVaccineHistory = useCallback((profileId: string, vaccineId: string) => {
-    setProfiles((current) => removeVaccineHistoryIn(current, profileId, vaccineId));
+    const next = removeVaccineHistoryIn(profilesRef.current, profileId, vaccineId);
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
   const addGrowthMeasurement = useCallback((profileId: string, input: NewGrowthInput): AddGrowthResult => {
-    let result: AddGrowthResult = { profiles: [], error: 'missing-date' };
-    setProfiles((current) => {
-      result = addGrowthMeasurementIn(current, profileId, input);
-      return result.error ? current : result.profiles;
-    });
+    const result = addGrowthMeasurementIn(profilesRef.current, profileId, input);
+    if (!result.error) {
+      profilesRef.current = result.profiles;
+      setProfiles(result.profiles);
+    }
     return result;
   }, []);
 
+  const updateGrowthMeasurement = useCallback(
+    (profileId: string, measurementId: string, input: NewGrowthInput): AddGrowthResult => {
+      const result = updateGrowthMeasurementIn(
+        profilesRef.current,
+        profileId,
+        measurementId,
+        input,
+      );
+      if (!result.error) {
+        profilesRef.current = result.profiles;
+        setProfiles(result.profiles);
+      }
+      return result;
+    },
+    [],
+  );
+
   const removeGrowthMeasurement = useCallback((profileId: string, measurementId: string) => {
-    setProfiles((current) => removeGrowthMeasurementIn(current, profileId, measurementId));
+    const next = removeGrowthMeasurementIn(profilesRef.current, profileId, measurementId);
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
-  const replaceAll = useCallback((next: Profile[]) => {
-    setProfiles(normaliseProfiles(next));
+  const replaceAll = useCallback((nextRaw: Profile[]) => {
+    const prevIds = new Set(profilesRef.current.map((p) => p.id));
+    const next = normaliseProfiles(nextRaw);
+    const nextIds = new Set(next.map((p) => p.id));
+    const dropped = [...prevIds].filter((id) => !nextIds.has(id));
+    if (dropped.length > 0) {
+      tombstonesRef.current = [...new Set([...tombstonesRef.current, ...dropped])].slice(-200);
+      saveTombstones(tombstonesRef.current);
+    }
+    profilesRef.current = next;
+    setProfiles(next);
   }, []);
 
   const importJSON = useCallback((raw: string) => {
-    let result: ImportResult = { ok: false, reason: 'unparseable' };
-    setProfiles((current) => {
-      result = mergeImport(current, raw);
-      return result.ok ? result.profiles : current;
-    });
-    // `result` is assigned synchronously by the updater above.
+    const result = mergeImport(profilesRef.current, raw);
+    if (result.ok) {
+      const importedIds = new Set(result.profiles.map((p) => p.id));
+      if (tombstonesRef.current.length > 0) {
+        tombstonesRef.current = tombstonesRef.current.filter((id) => !importedIds.has(id));
+        saveTombstones(tombstonesRef.current);
+      }
+      profilesRef.current = result.profiles;
+      setProfiles(result.profiles);
+    }
     return result;
   }, []);
 
@@ -219,6 +512,10 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       profiles,
       ready,
       persistent,
+      syncStatus,
+      lastSyncedAt,
+      storageWarning,
+      syncNow,
       addProfile,
       updateProfile,
       deleteProfile,
@@ -230,6 +527,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       removeDose,
       removeVaccineHistory,
       addGrowthMeasurement,
+      updateGrowthMeasurement,
       removeGrowthMeasurement,
       replaceAll,
       importJSON,
@@ -241,6 +539,10 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       profiles,
       ready,
       persistent,
+      syncStatus,
+      lastSyncedAt,
+      storageWarning,
+      syncNow,
       addProfile,
       updateProfile,
       deleteProfile,
@@ -252,6 +554,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       removeDose,
       removeVaccineHistory,
       addGrowthMeasurement,
+      updateGrowthMeasurement,
       removeGrowthMeasurement,
       replaceAll,
       importJSON,

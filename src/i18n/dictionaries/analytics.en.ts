@@ -47,4 +47,6 @@ export const en: TranslationDictionary = {
   'analytics.lastDose': 'Last recorded dose',
   'analytics.nextMilestone': 'Next milestone',
   'analytics.days': '{0} days',
+  'analytics.scope.member': 'Showing data for {0}',
+  'analytics.scope.family': 'Showing family-wide summary across {0} members',
 };

@@ -35,7 +35,11 @@ import {
   type Profile,
   type VaccinationEvent,
 } from '../types';
-import { todayISO } from './format';
+import {
+  isValidISODate,
+  resolveReferenceTodayISO,
+  type CalendarDateOptions,
+} from './format';
 import { createId } from './id';
 
 /**
@@ -52,7 +56,6 @@ export const SCHEDULE_VERSION = 'bd-nip-milestones-2.x';
 /** Bumped when the on-disk shape of an event changes. */
 export const LEDGER_VERSION = 3;
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const VACCINE_ID = /^[a-z0-9_-]{1,64}$/i;
 
 const MAX_CENTRE_LENGTH = 200;
@@ -69,6 +72,8 @@ export interface MilestoneDose {
   vaccineId: string;
   /** Age in days at which the milestone falls. */
   ageDays: number;
+  /** Exact calendar months when specified (e.g. 9 and 15 months). */
+  ageMonths?: number;
   /** 1-based position of this dose in the vaccine's series. */
   doseNumber: number;
   /** The label the schedule itself uses (`OPV-2`, `Pentavalent-3`). */
@@ -107,6 +112,7 @@ export const MILESTONE_DOSES: readonly MilestoneDose[] = (() => {
       rows.push({
         vaccineId: entry.id,
         ageDays: milestone.ageDays,
+        ageMonths: milestone.ageMonths,
         doseNumber,
         label: entry.name,
         scheduledDoseId: buildScheduledDoseId(entry.id, doseNumber, milestone.ageDays),
@@ -196,11 +202,13 @@ function cleanProvenance(value: unknown, fallback: DoseProvenance): DoseProvenan
 /** The review flags that follow from an event's own fields. */
 export function deriveReview(
   event: Pick<VaccinationEvent, 'vaccineId' | 'doseNumber' | 'date' | 'provenance'>,
+  dateOptions: CalendarDateOptions = {},
 ): { needsReview: boolean; reviewReason?: DoseReviewReason } {
-  if (!ISO_DATE.test(event.date) || Number.isNaN(Date.parse(event.date))) {
+  if (!isValidISODate(event.date)) {
     return { needsReview: true, reviewReason: 'invalid-date' };
   }
-  if (event.date > todayISO()) {
+  const refToday = resolveReferenceTodayISO(dateOptions);
+  if (event.date > refToday) {
     return { needsReview: true, reviewReason: 'future-date' };
   }
   const count = milestoneDoseCount(event.vaccineId);
@@ -251,7 +259,7 @@ export function normaliseEvent(
   if (!VACCINE_ID.test(vaccineId)) return null;
 
   const date = typeof candidate.date === 'string' ? candidate.date.trim().slice(0, 10) : '';
-  if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(date))) return null;
+  if (!isValidISODate(date)) return null;
 
   const now = options.now ?? new Date().toISOString();
   const scheduleVersion = cleanText(candidate.scheduleVersion, 64) ?? SCHEDULE_VERSION;
@@ -843,6 +851,7 @@ export function buildEvent(
   profileId: string,
   input: NewDoseEventInput,
   now = new Date().toISOString(),
+  dateOptions: CalendarDateOptions = {},
 ): BuildEventResult {
   const vaccineId = (input.vaccineId ?? '').trim();
   if (!vaccineId) return { error: 'missing-vaccine' };
@@ -850,8 +859,8 @@ export function buildEvent(
 
   const date = (input.date ?? '').trim().slice(0, 10);
   if (!date) return { error: 'missing-date' };
-  if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(date))) return { error: 'invalid-date' };
-  if (date > todayISO()) return { error: 'future-date' };
+  if (!isValidISODate(date)) return { error: 'invalid-date' };
+  if (date > resolveReferenceTodayISO(dateOptions)) return { error: 'future-date' };
 
   let doseNumber: number | null = null;
   if (input.doseNumber !== undefined && input.doseNumber !== null && input.doseNumber !== '') {
@@ -883,7 +892,7 @@ export function buildEvent(
   const notes = cleanText(input.notes, MAX_NOTES_LENGTH);
   if (notes) event.notes = notes;
 
-  const review = deriveReview(event);
+  const review = deriveReview(event, dateOptions);
   if (review.needsReview) {
     event.needsReview = true;
     if (review.reviewReason) event.reviewReason = review.reviewReason;
@@ -1211,6 +1220,316 @@ export function expectedDoseNumbers(vaccineId: string): number[] {
 export function vaccineIdsInLedger(events: readonly VaccinationEvent[]): string[] {
   return [...new Set(events.map((event) => event.vaccineId))].sort();
 }
+
+// ---------------------------------------------------------------------------
+// Pre-save duplicate checking & non-mutating history anomaly analysis
+// ---------------------------------------------------------------------------
+
+export interface DoseDuplicateCheck {
+  hasExactSameVisitDuplicate: boolean;
+  hasSameDoseNumber: boolean;
+  matchingDoseEvent?: VaccinationEvent;
+  sameVisitEvent?: VaccinationEvent;
+}
+
+/**
+ * Inspect existing ledger events before recording or editing a dose so the UI
+ * can distinguish an exact same-visit duplicate from a conflicting dose number
+ * without silently erasing or mutating any existing event.
+ */
+export function checkDuplicateDose(
+  events: readonly VaccinationEvent[],
+  candidate: {
+    vaccineId: string;
+    date: string;
+    doseNumber: number | null;
+    excludeEventId?: string;
+  },
+): DoseDuplicateCheck {
+  const sameVaccine = events.filter(
+    (event) => event.vaccineId === candidate.vaccineId && event.id !== candidate.excludeEventId,
+  );
+
+  const sameVisitEvent = candidate.date
+    ? sameVaccine.find(
+        (event) =>
+          event.date === candidate.date &&
+          (candidate.doseNumber === null ||
+            event.doseNumber === null ||
+            event.doseNumber === candidate.doseNumber),
+      )
+    : undefined;
+
+  const matchingDoseEvent =
+    typeof candidate.doseNumber === 'number' && candidate.doseNumber > 0
+      ? sameVaccine.find((event) => event.doseNumber === candidate.doseNumber)
+      : undefined;
+
+  return {
+    hasExactSameVisitDuplicate: Boolean(sameVisitEvent),
+    hasSameDoseNumber: Boolean(matchingDoseEvent),
+    matchingDoseEvent,
+    sameVisitEvent,
+  };
+}
+
+export type DoseAnomalyType =
+  | 'invalid-date'
+  | 'future-date'
+  | 'before-dob'
+  | 'exact-same-visit-duplicate'
+  | 'duplicate-dose-number'
+  | 'dose-number-out-of-range'
+  | 'legacy-dose-number-unknown'
+  | 'dose-number-unknown'
+  | 'chronological-inversion'
+  | 'excess-unattributed';
+
+export interface DoseAnomaly {
+  id: string;
+  type: DoseAnomalyType;
+  severity: 'warning' | 'error';
+  eventId: string;
+  relatedEventId?: string;
+  vaccineId: string;
+  doseNumber: number | null;
+  date: string;
+  description: { en: string; bn: string };
+}
+
+/**
+ * Analyse a ledger (and optional date of birth) for cross-event inconsistencies,
+ * pre-birth administration dates, chronological inversions, duplicate visits,
+ * out-of-range dose numbers, and uncertain records — purely without mutating
+ * any ledger event or breaking referential equality on untouched rows.
+ */
+export function analyzeDoseHistoryAnomalies(
+  events: readonly VaccinationEvent[],
+  dateOfBirth?: string,
+  dateOptions: CalendarDateOptions = {},
+): DoseAnomaly[] {
+  const anomalies: DoseAnomaly[] = [];
+  const sorted = sortEvents(events);
+  const validDob = dateOfBirth && isValidISODate(dateOfBirth) ? dateOfBirth : null;
+  const refToday = resolveReferenceTodayISO(dateOptions);
+
+  const seenDoseKey = new Map<string, VaccinationEvent>();
+  const seenVisitKey = new Map<string, VaccinationEvent>();
+  const firstEventByVaccineDose = new Map<string, Map<number, VaccinationEvent>>();
+
+  for (const event of sorted) {
+    const vaccine = allVaccines.find((v) => v.id === event.vaccineId);
+    const labelEn = vaccine?.name.en ?? event.vaccineId;
+    const labelBn = vaccine?.name.bn ?? event.vaccineId;
+    const scheduledCount = milestoneDoseCount(event.vaccineId);
+
+    if (!isValidISODate(event.date)) {
+      anomalies.push({
+        id: `${event.id}:invalid-date`,
+        type: 'invalid-date',
+        severity: 'error',
+        eventId: event.id,
+        vaccineId: event.vaccineId,
+        doseNumber: event.doseNumber,
+        date: event.date,
+        description: {
+          en: `${labelEn} carries an invalid calendar date (${event.date}).`,
+          bn: `${labelBn}-এর তারিখটি (${event.date}) বৈধ ক্যালেন্ডার তারিখ নয়।`,
+        },
+      });
+    } else {
+      if (event.date > refToday) {
+        anomalies.push({
+          id: `${event.id}:future-date`,
+          type: 'future-date',
+          severity: 'warning',
+          eventId: event.id,
+          vaccineId: event.vaccineId,
+          doseNumber: event.doseNumber,
+          date: event.date,
+          description: {
+            en: `${labelEn} is dated in the future (${event.date}) relative to ${refToday}.`,
+            bn: `${labelBn}-এর তারিখ (${event.date}) বর্তমান তারিখের (${refToday}) পরের।`,
+          },
+        });
+      }
+
+      if (validDob && event.date < validDob) {
+        anomalies.push({
+          id: `${event.id}:before-dob`,
+          type: 'before-dob',
+          severity: 'error',
+          eventId: event.id,
+          vaccineId: event.vaccineId,
+          doseNumber: event.doseNumber,
+          date: event.date,
+          description: {
+            en: `${labelEn} (${event.date}) is dated before the member's date of birth (${validDob}).`,
+            bn: `${labelBn}-এর তারিখ (${event.date}) সদস্যের জন্মতারিখের (${validDob}) আগের।`,
+          },
+        });
+      }
+    }
+
+    if (event.doseNumber === null) {
+      if (scheduledCount > 0) {
+        const isLegacy = event.provenance === 'legacy-migration';
+        anomalies.push({
+          id: `${event.id}:${isLegacy ? 'legacy-dose-number-unknown' : 'dose-number-unknown'}`,
+          type: isLegacy ? 'legacy-dose-number-unknown' : 'dose-number-unknown',
+          severity: 'warning',
+          eventId: event.id,
+          vaccineId: event.vaccineId,
+          doseNumber: null,
+          date: event.date,
+          description: isLegacy
+            ? {
+                en: `${labelEn} (${event.date}) was imported without a dose number; assignment to the schedule is provisional.`,
+                bn: `${labelBn} (${event.date}) ডোজ নম্বর ছাড়াই ইম্পোর্ট করা হয়েছে; সময়সূচীর সাথে মিল সাময়িক।`,
+              }
+            : {
+                en: `${labelEn} (${event.date}) was saved without specifying which dose number it was.`,
+                bn: `${labelBn} (${event.date}) কত নম্বর ডোজ তা উল্লেখ না করেই সংরক্ষণ করা হয়েছে।`,
+              },
+        });
+      }
+    } else {
+      if (scheduledCount > 0 && event.doseNumber > scheduledCount) {
+        anomalies.push({
+          id: `${event.id}:dose-number-out-of-range`,
+          type: 'dose-number-out-of-range',
+          severity: 'warning',
+          eventId: event.id,
+          vaccineId: event.vaccineId,
+          doseNumber: event.doseNumber,
+          date: event.date,
+          description: {
+            en: `${labelEn} is marked as dose ${event.doseNumber}, beyond the ${scheduledCount} scheduled national milestones.`,
+            bn: `${labelBn}-এ ডোজ ${event.doseNumber} লেখা হয়েছে, যা নির্ধারিত ${scheduledCount}টি জাতীয় ধাপের বেশি।`,
+          },
+        });
+      }
+
+      const doseKey = `${event.seriesId}#${event.doseNumber}`;
+      const existingDose = seenDoseKey.get(doseKey);
+      if (existingDose && existingDose.id !== event.id) {
+        anomalies.push({
+          id: `${event.id}:duplicate-dose-number`,
+          type: 'duplicate-dose-number',
+          severity: 'warning',
+          eventId: event.id,
+          relatedEventId: existingDose.id,
+          vaccineId: event.vaccineId,
+          doseNumber: event.doseNumber,
+          date: event.date,
+          description: {
+            en: `${labelEn} dose ${event.doseNumber} is recorded on ${event.date} and earlier on ${existingDose.date}.`,
+            bn: `${labelBn}-এর ডোজ ${event.doseNumber} ${event.date} এবং এর আগে ${existingDose.date} তারিখেও লেখা আছে।`,
+          },
+        });
+      } else {
+        seenDoseKey.set(doseKey, event);
+      }
+
+      const doseMap = firstEventByVaccineDose.get(event.vaccineId) ?? new Map<number, VaccinationEvent>();
+      if (!doseMap.has(event.doseNumber)) {
+        doseMap.set(event.doseNumber, event);
+        firstEventByVaccineDose.set(event.vaccineId, doseMap);
+      }
+    }
+
+    const visitKey = `${event.vaccineId}|${event.date}|${event.doseNumber ?? '?'}`;
+    const existingVisit = seenVisitKey.get(visitKey);
+    if (existingVisit && existingVisit.id !== event.id) {
+      anomalies.push({
+        id: `${event.id}:exact-same-visit-duplicate`,
+        type: 'exact-same-visit-duplicate',
+        severity: 'warning',
+        eventId: event.id,
+        relatedEventId: existingVisit.id,
+        vaccineId: event.vaccineId,
+        doseNumber: event.doseNumber,
+        date: event.date,
+        description: {
+          en: `${labelEn} has duplicate entries for the same visit date (${event.date}).`,
+          bn: `${labelBn}-এর একই তারিখে (${event.date}) একাধিক অভিন্ন এন্ট্রি রয়েছে।`,
+        },
+      });
+    } else {
+      seenVisitKey.set(visitKey, event);
+    }
+  }
+
+  // Chronological inversion check: Dose B > Dose A dated strictly before Dose A
+  for (const [vaccineId, doseMap] of firstEventByVaccineDose.entries()) {
+    const vaccine = allVaccines.find((v) => v.id === vaccineId);
+    const labelEn = vaccine?.name.en ?? vaccineId;
+    const labelBn = vaccine?.name.bn ?? vaccineId;
+    const numbers = [...doseMap.keys()].sort((a, b) => a - b);
+    for (let i = 0; i < numbers.length; i++) {
+      for (let j = i + 1; j < numbers.length; j++) {
+        const earlierDose = doseMap.get(numbers[i])!;
+        const laterDose = doseMap.get(numbers[j])!;
+        if (
+          isValidISODate(earlierDose.date) &&
+          isValidISODate(laterDose.date) &&
+          laterDose.date < earlierDose.date
+        ) {
+          anomalies.push({
+            id: `${laterDose.id}:chronological-inversion:${earlierDose.id}`,
+            type: 'chronological-inversion',
+            severity: 'warning',
+            eventId: laterDose.id,
+            relatedEventId: earlierDose.id,
+            vaccineId,
+            doseNumber: laterDose.doseNumber,
+            date: laterDose.date,
+            description: {
+              en: `${labelEn} dose ${laterDose.doseNumber} (${laterDose.date}) is dated before dose ${earlierDose.doseNumber} (${earlierDose.date}).`,
+              bn: `${labelBn}-এর ডোজ ${laterDose.doseNumber} (${laterDose.date}) ডোজ ${earlierDose.doseNumber} (${earlierDose.date})-এর আগের তারিখে লেখা হয়েছে।`,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  // Excess unattributed events beyond milestone slots
+  const evaluated = seriesState(sorted);
+  for (const [vaccineId, state] of Object.entries(evaluated)) {
+    if (state.scheduledDoseCount > 0 && state.unattributedCount > 0) {
+      const vaccine = allVaccines.find((v) => v.id === vaccineId);
+      const labelEn = vaccine?.name.en ?? vaccineId;
+      const labelBn = vaccine?.name.bn ?? vaccineId;
+      const unattributedEvents = sorted.filter(
+        (event) =>
+          event.vaccineId === vaccineId &&
+          event.doseNumber === null &&
+          !state.administered.some(
+            (adm) => adm.eventId === event.id && adm.doseNumber !== null,
+          ),
+      );
+      for (const event of unattributedEvents) {
+        anomalies.push({
+          id: `${event.id}:excess-unattributed`,
+          type: 'excess-unattributed',
+          severity: 'warning',
+          eventId: event.id,
+          vaccineId,
+          doseNumber: null,
+          date: event.date,
+          description: {
+            en: `${labelEn} (${event.date}) could not be matched to an open scheduled milestone slot (${state.scheduledDoseCount} total scheduled).`,
+            bn: `${labelBn} (${event.date}) নির্ধারিত ${state.scheduledDoseCount}টি ধাপের কোনো খালি স্লটের সাথে মেলানো যায়নি।`,
+          },
+        });
+      }
+    }
+  }
+
+  return anomalies;
+}
+
 
 /** How many vaccine products this app knows about (for "unscheduled" framing). */
 export function knownVaccineIds(): string[] {

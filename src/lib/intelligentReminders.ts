@@ -10,7 +10,17 @@
  */
 
 import { allVaccines } from '../data/vaccines';
-import { addDays, daysBetween, parseISODate, startOfToday, toISODate, todayISO } from './format';
+import {
+  addDays,
+  daysBetween,
+  parseISODate,
+  resolveReferenceToday,
+  resolveReferenceTodayISO,
+  startOfToday,
+  toISODate,
+  todayISO,
+  type CalendarDateOptions,
+} from './format';
 import { createId } from './id';
 import { generatePersonalizedSchedule, milestoneDoseName } from './smartScheduler';
 import type { DoseHistoryInput } from './doseLedger';
@@ -61,6 +71,75 @@ export const DEFAULT_REMINDER_PREFERENCES: ReminderPreferences = {
   quietHoursStart: '22:00',
   quietHoursEnd: '07:00',
 };
+
+export const REMINDER_LEAD_DAYS_OPTIONS = [14, 7, 3, 2, 1] as const;
+
+export interface PushDosePayload {
+  profileId: string;
+  profileName: string;
+  vaccineId: string;
+  vaccineNameEn: string;
+  vaccineNameBn: string;
+  doseNumber: number;
+  scheduledDoseId: string;
+  doseLabelEn: string;
+  doseLabelBn: string;
+  scheduledDate: string;
+}
+
+/**
+ * Extract unrecorded upcoming/due scheduled doses across every family profile
+ * for server-side 48-hour Web Push notification scheduling.
+ */
+export function buildUpcomingPushDoses(
+  profiles: Array<{ id: string; name: string; dateOfBirth: string } & DoseHistoryInput>,
+  options: CalendarDateOptions = {},
+): PushDosePayload[] {
+  const vaccineById = new Map(allVaccines.map((v) => [v.id, v]));
+  const items: PushDosePayload[] = [];
+  const today = resolveReferenceToday(options);
+
+  for (const profile of profiles) {
+    const schedule = generatePersonalizedSchedule(profile.dateOfBirth, profile, options);
+    for (const dose of schedule) {
+      if (dose.status === 'completed') continue;
+      const dueDate = parseISODate(dose.scheduledDate);
+      if (!dueDate || dueDate < today) continue;
+
+      const vaccine = vaccineById.get(dose.vaccineId);
+      items.push({
+        profileId: profile.id,
+        profileName: profile.name,
+        vaccineId: dose.vaccineId,
+        vaccineNameEn: vaccine?.name.en ?? dose.vaccineId,
+        vaccineNameBn: vaccine?.name.bn ?? dose.vaccineId,
+        doseNumber: dose.doseNumber,
+        scheduledDoseId: dose.scheduledDoseId,
+        doseLabelEn: milestoneDoseName(dose, 'en'),
+        doseLabelBn: milestoneDoseName(dose, 'bn'),
+        scheduledDate: dose.scheduledDate,
+      });
+    }
+  }
+
+  return items.sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+}
+
+/**
+ * Return doses due within the next 48 hours (0 to 2 calendar days away).
+ */
+export function findUpcoming48HourDoses(
+  profiles: Array<{ id: string; name: string; dateOfBirth: string } & DoseHistoryInput>,
+  options: CalendarDateOptions = {},
+): PushDosePayload[] {
+  const today = resolveReferenceToday(options);
+  return buildUpcomingPushDoses(profiles, options).filter((item) => {
+    const due = parseISODate(item.scheduledDate);
+    if (!due) return false;
+    const daysAway = daysBetween(today, due);
+    return daysAway >= 0 && daysAway <= 2;
+  });
+}
 
 const REMINDERS_STORAGE_KEY = 'tikatrack-reminders';
 const PREFERENCES_STORAGE_KEY = 'tikatrack-reminder-preferences';
@@ -167,6 +246,15 @@ function isQuietHours(preferences: ReminderPreferences): boolean {
   const [startHours, startMinutes] = preferences.quietHoursStart.split(':').map(Number);
   const [endHours, endMinutes] = preferences.quietHoursEnd.split(':').map(Number);
 
+  if (
+    !Number.isFinite(startHours) ||
+    !Number.isFinite(startMinutes) ||
+    !Number.isFinite(endHours) ||
+    !Number.isFinite(endMinutes)
+  ) {
+    return false;
+  }
+
   const startMinutesTotal = startHours * 60 + startMinutes;
   const endMinutesTotal = endHours * 60 + endMinutes;
 
@@ -203,17 +291,26 @@ export function generateReminders(
   dateOfBirth: string,
   history: DoseHistoryInput,
   preferences: ReminderPreferences,
+  options: CalendarDateOptions = {},
 ): Reminder[] {
   if (!preferences.enabled) return [];
 
-  const scheduledDoses = generatePersonalizedSchedule(dateOfBirth, history);
+  const scheduledDoses = generatePersonalizedSchedule(dateOfBirth, history, options);
   const reminders: Reminder[] = [];
-  const today = startOfToday();
+  const today = resolveReferenceToday(options);
+  const seenKeys = new Set<string>();
+
+  const pushUnique = (reminder: Reminder) => {
+    const key = generateNotificationId(reminder);
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    reminders.push(reminder);
+  };
 
   scheduledDoses.forEach((dose) => {
-    // Every date here is a local calendar date. Mixing `new Date('YYYY-MM-DD')`
-    // (UTC midnight) with `toISOString()` (UTC) shifted reminder dates a day
-    // early for UTC+6 users — i.e. all of Bangladesh.
+    // Completed doses (including early administrations) must not generate future reminders.
+    if (dose.status === 'completed') return;
+
     const scheduledDate = parseISODate(dose.scheduledDate);
     if (!scheduledDate) return;
 
@@ -224,7 +321,7 @@ export function generateReminders(
 
         // Only create reminder if it's in the future or today
         if (reminderDate >= today) {
-          reminders.push({
+          pushUnique({
             id: createId('rem'),
             profileId,
             vaccineId: dose.vaccineId,
@@ -247,7 +344,7 @@ export function generateReminders(
 
     // Generate "on due date" reminder
     if (preferences.onDueDate && scheduledDate >= today) {
-      reminders.push({
+      pushUnique({
         id: createId('rem'),
         profileId,
         vaccineId: dose.vaccineId,
@@ -271,7 +368,7 @@ export function generateReminders(
       const daysOverdue = daysBetween(scheduledDate, today);
       const nextReminderDate = addDays(today, preferences.overdueInterval);
 
-      reminders.push({
+      pushUnique({
         id: createId('rem'),
         profileId,
         vaccineId: dose.vaccineId,
@@ -297,8 +394,11 @@ export function generateReminders(
 /**
  * Get reminders due today
  */
-export function getRemindersDueToday(reminders: Reminder[]): Reminder[] {
-  const today = todayISO();
+export function getRemindersDueToday(
+  reminders: Reminder[],
+  options: CalendarDateOptions = {},
+): Reminder[] {
+  const today = options.now || options.timezone ? resolveReferenceTodayISO(options) : todayISO();
   return reminders.filter((r) => r.reminderDate === today && !r.sent);
 }
 
@@ -426,10 +526,11 @@ export async function processDueReminders(
     if (!vaccine) continue;
 
     // Create notification content
+    const displayLabel = reminder.doseLabel?.[language] ?? vaccine.name[language];
     const title =
       language === 'en'
-        ? `Vaccination Reminder: ${vaccine.name.en}`
-        : `টিকাদান রিমাইন্ডার: ${vaccine.name.bn}`;
+        ? `Vaccination Reminder: ${displayLabel}`
+        : `টিকাদান রিমাইন্ডার: ${displayLabel}`;
 
     const body =
       language === 'en'

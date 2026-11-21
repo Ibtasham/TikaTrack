@@ -78,4 +78,7 @@ export const bn: TranslationDictionary = {
   'centres.map.unavailable': 'Google Maps কী বা নেটওয়ার্ক সংযোগ ছাড়া ইন্টারেক্টিভ ম্যাপ দেখানো যাচ্ছে না — নিচের কেন্দ্রের তালিকা ও ম্যাপ লিংক ব্যবহার করতে পারেন।',
   'centres.map.noCoords': '{0}-এর এখনো পিন স্থানাঙ্ক নেই — ঠিকানা দেখতে ম্যাপে খুলুন ব্যবহার করুন।',
   'centres.map.userLocation': 'আপনার যাত্রা শুরুর স্থান',
+  'centres.showingOf': '{1}টি কেন্দ্রের মধ্যে {0}টি দেখানো হচ্ছে',
+  'centres.loadMore': 'আরও {0}টি কেন্দ্র দেখুন',
+  'centres.showAll': 'সবগুলো দেখুন ({0})',
 };

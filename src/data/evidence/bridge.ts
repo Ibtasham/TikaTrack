@@ -2,7 +2,7 @@
  * Legacy bridge — every TikaTrack 2.x catalogue id, classified.
  *
  * The 2.x dataset is not deleted or rewritten (PROMPT 0: non-destructive).
- * Instead each of its 52 entries is mapped onto the 3.0 taxonomy, given a
+ * Instead each of its 90 entries is mapped onto the 3.0 taxonomy, given a
  * product status, a review state and the flags that explain what is wrong with
  * it. The validator and the evidence report read this file; the UI reads it to
  * decide what a user is allowed to see and how it must be labelled.
@@ -13,8 +13,10 @@
  * `requires-professional-review` and, if two statements disagree, a conflict id.
  */
 
-import { allVaccines } from '../vaccines';
-import type { BridgeFlag, LegacyBridgeEntry, ProductStatus, ProgrammeClass, ReviewStatus } from './types';
+import { allVaccines } from '../vaccines.ts';
+import { getConflict } from './conflicts.ts';
+import { getRecordByLegacyId } from './records.ts';
+import type { BridgeFlag, LegacyBridgeEntry, ProductStatus, ProgrammeClass, ReviewStatus } from './types.ts';
 
 type Row = [
   legacyId: string,
@@ -25,19 +27,18 @@ type Row = [
 ];
 
 /**
- * The nine ids that appear in the 2.x `schedule[]` array, plus fIPV, which the
- * WHO Bangladesh country page confirms as a programme antigen introduced in
- * 2017 (conflict C-001 records its absence from the schedule).
+ * The seven Bangladesh routine EPI antigens (`bcg`, `opv`, `pentavalent`,
+ * `pcv`, `fipv`, `mr`, `tcv`) verified in `schedule[]`.
  */
 const NIP_ANTIGENS = new Set(['bcg', 'opv', 'pentavalent', 'pcv', 'mr', 'tcv', 'fipv']);
 
-/** Legacy ids marked `category: 'routine'` that are not national-programme antigens. */
+/** Legacy ids that carried `category: 'routine'` in TikaTrack 2.x prior to C-004 cleanup in 3.1.0. */
 const MISLABELLED_ROUTINE = ['mmr', 'hepatitisB', 'polio-ipv', 'dtp', 'hib', 'dtap', 'tdap', 'hexavalent', 'pentavalent-booster'];
 
 const ROWS: Row[] = [
   // --- Bangladesh national routine EPI ------------------------------------
   ['bcg', 'bd-nip-routine', 'licensed-bd', [], []],
-  ['opv', 'bd-nip-routine', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-001']],
+  ['opv', 'bd-nip-routine', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-001', 'C-005']],
   ['pentavalent', 'bd-nip-routine', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-004']],
   ['pcv', 'bd-nip-routine', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-005']],
   ['mr', 'bd-nip-routine', 'licensed-bd', [], ['C-002']],
@@ -104,6 +105,46 @@ const ROWS: Row[] = [
   ['hiv', 'research-not-available', 'in-development', ['research-stage-product', 'product-not-licensed-in-bangladesh'], ['C-008']],
   ['tb-new', 'research-not-available', 'in-development', ['research-stage-product', 'product-not-licensed-in-bangladesh', 'duplicate-antigen-coverage'], ['C-008']],
   ['cancer-cervical', 'research-not-available', 'in-development', ['research-stage-product', 'product-not-licensed-in-bangladesh', 'duplicate-antigen-coverage'], ['C-008']],
+
+  // --- Broadened licensed & WHO-PQ catalogue entries (38 additions) ---------
+  ['pcv13', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-005']],
+  ['pcv15', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['pcv20', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['rotavirus-rotarix', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-003']],
+  ['rotavirus-rotateq', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-003']],
+  ['rotavirus-rotavac', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], ['C-003']],
+  ['hpv-9valent', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-003']],
+  ['hpv-bivalent', 'bd-national-campaign', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-003']],
+  ['hepa-hepb-twinrix', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-004']],
+  ['hepatitis-e', 'bd-special-risk', 'licensed-elsewhere-only', ['awaiting-professional-review'], []],
+  ['hepatitis-b-hbig', 'bd-special-risk', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['dengue-dengvaxia', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['chikungunya', 'travel', 'licensed-elsewhere-only', [], []],
+  ['je-ixiaro', 'travel', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], ['C-003']],
+  ['ebola-ervebo', 'bd-special-risk', 'licensed-elsewhere-only', [], []],
+  ['ebola-zabdeno', 'occupational', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['polio-nopv2', 'bd-national-campaign', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], ['C-001']],
+  ['cholera-euvichol', 'bd-national-campaign', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-007']],
+  ['cholera-dukoral', 'travel', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], ['C-007']],
+  ['cholera-vaxchora', 'travel', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], ['C-007']],
+  ['td-adult', 'bd-special-risk', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['dtap-ipv', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-004']],
+  ['dtap-ipv-hib', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-004']],
+  ['measles-single', 'bd-national-campaign', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['rubella-single', 'bd-special-risk', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['zoster-live', 'international-reference', 'discontinued', ['discontinued-product', 'duplicate-antigen-coverage'], []],
+  ['varicella-varizig', 'bd-special-risk', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['influenza-high-dose', 'private-market-bd', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['influenza-laiv', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['rsv-nirsevimab', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['rsv-arexvy', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['rabies-pcecv', 'bd-special-risk', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['rabies-rig', 'bd-special-risk', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['tetanus-tig', 'bd-special-risk', 'licensed-bd', ['duplicate-antigen-coverage'], []],
+  ['typhoid-typbar-tcv', 'private-market-bd', 'licensed-bd', ['duplicate-antigen-coverage'], ['C-006']],
+  ['meningococcal-abcwy', 'international-reference', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['covid19-mrna-updated', 'private-market-bd', 'licensed-elsewhere-only', ['duplicate-antigen-coverage'], []],
+  ['adenovirus', 'occupational', 'licensed-elsewhere-only', [], []],
 ];
 
 /** URL values that cite a homepage rather than a document. */
@@ -129,16 +170,25 @@ function derivedFlags(legacyId: string): BridgeFlag[] {
   return flags;
 }
 
-/** No legacy entry is evidence-verified: no clinical source has been registered yet. */
-const LEGACY_REVIEW_STATUS: ReviewStatus = 'requires-professional-review';
+function deriveReviewStatus(legacyId: string, conflictIds: string[]): ReviewStatus {
+  const record = getRecordByLegacyId(legacyId);
+  const hasOpenConflict = conflictIds.some((id) => getConflict(id)?.status === 'unresolved');
+  if (record) {
+    if (hasOpenConflict && record.reviewStatus === 'evidence-verified') {
+      return 'conflict-unresolved';
+    }
+    return record.reviewStatus;
+  }
+  return 'requires-professional-review';
+}
 
 export const legacyBridge: readonly LegacyBridgeEntry[] = ROWS.map(
   ([legacyId, programme, productStatus, flags, conflicts]) => ({
     legacyId,
-    recordId: undefined,
+    recordId: getRecordByLegacyId(legacyId)?.id,
     programme,
     productStatus,
-    reviewStatus: LEGACY_REVIEW_STATUS,
+    reviewStatus: deriveReviewStatus(legacyId, conflicts),
     flags: [...new Set([...flags, ...derivedFlags(legacyId)])],
     conflicts,
   }),
@@ -156,8 +206,7 @@ export function programmeFor(legacyId: string): ProgrammeClass {
 
 /**
  * May this legacy entry be shown to users as an available vaccine and indexed
- * by the assistant? Research-stage and unlicensed products are excluded until a
- * decision is recorded in the conflict register (C-008).
+ * by the assistant? Research-stage and unlicensed products stay excluded (C-008).
  */
 export function isPublishable(legacyId: string): boolean {
   const entry = bridgeByLegacyId.get(legacyId);

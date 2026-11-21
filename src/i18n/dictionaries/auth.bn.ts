@@ -63,4 +63,16 @@ export const bn: TranslationDictionary = {
   'auth.hidePassword': 'পাসওয়ার্ড লুকান',
   'auth.showPassword': 'পাসওয়ার্ড দেখান',
   'auth.passwordChanged': 'পাসওয়ার্ড হালনাগাদ হয়েছে',
+  'auth.google.title': 'গুগল দিয়ে সব ডিভাইসে সিঙ্ক করুন',
+  'auth.google.subtitle':
+    'পরিবারের টিকাদান ও বৃদ্ধির রেকর্ড এনক্রিপ্টেড ফায়ারবেস + ক্লাউড এসকিউএল স্টোরেজে ব্যাকআপ রাখুন — অফলাইনেও কাজ চলবে।',
+  'auth.google.button': 'গুগল দিয়ে চালিয়ে যান',
+  'auth.google.success': 'গুগল দিয়ে সাইন ইন সম্পন্ন — ক্লাউড সিঙ্ক সক্রিয়',
+  'auth.google.syncNow': 'এখনই সিঙ্ক করুন',
+  'auth.google.syncedAt': 'সিঙ্ক হয়েছে {0}',
+  'auth.google.vaultTitle': 'সিঙ্ককৃত পরিবার স্বাস্থ্য ভল্ট',
+  'auth.google.vaultBody':
+    'আপনার পরিবারের প্রোফাইল, ডোজের ইতিহাস ও বৃদ্ধির তথ্য এই ব্রাউজার, ফায়ারস্টোর ও ক্লাউড এসকিউএল-এ স্বয়ংক্রিয়ভাবে সংরক্ষিত থাকে।',
+  'auth.orOfflineAccount': 'অথবা অফলাইন ব্রাউজার অ্যাকাউন্ট ব্যবহার করুন',
+  'auth.profilesCount': '{0}টি পরিবারের প্রোফাইল',
 };

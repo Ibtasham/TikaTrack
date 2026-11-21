@@ -5,6 +5,7 @@ import { Printer, Scale, X } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { usePersistentState } from '../hooks';
 import { useI18n } from '../i18n';
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
 import { allVaccines, vaccineColors, type Vaccine } from '../data/vaccines';
 import { printElement } from '../lib/exporters';
 import { STORAGE_KEYS } from '../lib/storage';
@@ -19,15 +20,23 @@ const ATTRIBUTES: Array<{
   { key: 'name', read: (vaccine, language) => vaccine.name[language] },
   { key: 'fullName', read: (vaccine, language) => vaccine.fullName[language] },
   { key: 'disease', read: (vaccine, language) => vaccine.disease[language] },
+  { key: 'platform', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).platform[language] },
   { key: 'category', read: (vaccine) => vaccine.category },
   { key: 'schedule', read: (vaccine, language) => vaccine.schedule[language] },
   { key: 'doses', read: (vaccine) => String(vaccine.doses ?? '—') },
+  { key: 'route', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).route[language] },
+  { key: 'doseVolume', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).doseVolume[language] },
+  { key: 'dosingProtocol', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).dosingProtocol[language] },
   { key: 'efficacy', read: (vaccine) => vaccine.efficacy || '—' },
+  { key: 'immunityProfile', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).immunityProfile[language] },
+  { key: 'coldChain', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).coldChain[language] },
+  { key: 'specialPopulations', read: (vaccine, language) => getVaccineClinicalProfile(vaccine).specialPopulations[language] },
   { key: 'ageGroup', read: (vaccine) => vaccine.ageGroup || '—' },
   { key: 'introduced', read: (vaccine) => vaccine.introduced || '—' },
   { key: 'commonEffects', read: (vaccine, language) => vaccine.commonEffects[language] },
   { key: 'seriousEffects', read: (vaccine, language) => vaccine.seriousEffects[language] },
   { key: 'contraindications', read: (vaccine, language) => vaccine.contraindications[language] },
+  { key: 'formulations', read: (vaccine) => getVaccineClinicalProfile(vaccine).formulations },
   { key: 'source', read: (vaccine) => vaccine.source },
 ];
 

@@ -93,19 +93,21 @@ describe('doseLedger: the milestone table', () => {
     );
 
     // bcg 1 · opv 1-4 (the birth dose is "OPV-0" and is dose 1 of 4) ·
-    // pentavalent 1-3 · pcv 1-3 · mr 1-2 · tcv 1 → 14 rows.
+    // pentavalent 1-3 · pcv 1-3 · fipv 1-2 · mr 1-2 · tcv 1 → 16 rows.
     expect(MILESTONE_DOSES.map((row) => row.scheduledDoseId)).toEqual([
       'bcg#1@0d',
       'opv#1@0d',
       'pentavalent#1@42d',
       'opv#2@42d',
       'pcv#1@42d',
+      'fipv#1@42d',
       'pentavalent#2@70d',
       'opv#3@70d',
       'pcv#2@70d',
       'pentavalent#3@98d',
       'opv#4@98d',
       'pcv#3@98d',
+      'fipv#2@98d',
       'mr#1@270d',
       'mr#2@450d',
       'tcv#1@450d',
@@ -130,7 +132,8 @@ describe('doseLedger: the milestone table', () => {
   it('exposes lookups by vaccine, age and dose number', () => {
     expect(milestoneDoseCount('opv')).toBe(4);
     expect(milestoneDoseCount('bcg')).toBe(1);
-    expect(milestoneDoseCount('fipv')).toBe(0); // not in the milestone schedule
+    expect(milestoneDoseCount('fipv')).toBe(2);
+    expect(milestoneDoseCount('rotavirus')).toBe(0); // not in routine EPI schedule
     expect(doseNumberForMilestone('opv', 70)).toBe(3);
     expect(doseNumberForMilestone('opv', 999)).toBeNull();
     expect(milestoneForDose('pentavalent', 3)?.ageDays).toBe(98);
@@ -439,10 +442,10 @@ describe('doseLedger: normaliseEvent', () => {
       }),
     ).toEqual({ needsReview: true, reviewReason: 'dose-number-unknown' });
 
-    // A vaccine with no sourced schedule cannot be "out of range" either.
+    // A vaccine with no routine milestone schedule cannot be "out of range" either.
     expect(
       deriveReview({
-        vaccineId: 'fipv',
+        vaccineId: 'rotavirus',
         date: '2024-01-05',
         doseNumber: null,
         provenance: 'manual',
@@ -507,8 +510,8 @@ describe('doseLedger: series state and attribution', () => {
   it('starts from an empty state that knows the schedule', () => {
     expect(emptySeriesState('opv').scheduledDoseCount).toBe(4);
     expect(emptySeriesState('opv').unscheduled).toBe(false);
-    expect(emptySeriesState('fipv').unscheduled).toBe(true);
-    expect(emptySeriesState('fipv').administered).toEqual([]);
+    expect(emptySeriesState('rotavirus').unscheduled).toBe(true);
+    expect(emptySeriesState('rotavirus').administered).toEqual([]);
   });
 
   it('attributes one unnumbered legacy event to one dose only', () => {
@@ -601,14 +604,13 @@ describe('doseLedger: series state and attribution', () => {
 
   it('claims nothing for a vaccine the milestone schedule does not cover', () => {
     const state = seriesState([
-      event({ id: 'a', vaccineId: 'fipv', doseNumber: 1, date: '2024-02-19' }),
-      event({ id: 'b', vaccineId: 'fipv', date: '2024-04-19' }),
-    ]).fipv;
+      event({ id: 'a', vaccineId: 'rotavirus', doseNumber: 1, date: '2024-02-19' }),
+      event({ id: 'b', vaccineId: 'rotavirus', date: '2024-04-19' }),
+    ]).rotavirus;
 
     expect(state.unscheduled).toBe(true);
     expect(state.scheduledDoseCount).toBe(0);
-    // Both doses are kept and shown, but neither can complete a series the app
-    // has no sourced schedule for.
+    // Both doses are kept and shown, but neither can complete a routine EPI series.
     expect(state.satisfiedDoseNumbers).toEqual([]);
     expect(state.administered).toHaveLength(2);
     expect(state.unattributedCount).toBe(1);

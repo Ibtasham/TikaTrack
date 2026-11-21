@@ -22,8 +22,10 @@ import VaccinesPage from './pages/VaccinesPage';
  * be waiting on a lazy chunk that was never cached.
  */
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const ColdChainLabPage = lazy(() => import('./pages/ColdChainLabPage'));
 const ComparePage = lazy(() => import('./pages/ComparePage'));
 const PassportPage = lazy(() => import('./pages/PassportPage'));
+const ReadinessPage = lazy(() => import('./pages/ReadinessPage'));
 const RemindersPage = lazy(() => import('./pages/RemindersPage'));
 
 /**
@@ -76,6 +78,22 @@ export function AppRoutes() {
           element={
             <Suspense fallback={<PageSkeleton />}>
               <PassportPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="cold-chain"
+          element={
+            <Suspense fallback={<PageSkeleton />}>
+              <ColdChainLabPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="readiness"
+          element={
+            <Suspense fallback={<PageSkeleton />}>
+              <ReadinessPage />
             </Suspense>
           }
         />

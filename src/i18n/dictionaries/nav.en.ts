@@ -21,4 +21,7 @@ export const en: TranslationDictionary = {
   'nav.auth': 'Account',
   'nav.about': 'About',
   'nav.privacy': 'Privacy & data',
+  'nav.coldChain': '3D Cold-Chain Lab',
+  'nav.readiness': 'Readiness Advisor',
+  'nav.quickSearch': 'Quick Search',
 };

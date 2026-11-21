@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   Download,
   FileJson,
+  FileText,
   IdCard,
   Image,
   Printer,
@@ -34,10 +35,17 @@ import {
   passportToQR,
   upsertPassport,
   verifyPassportPayload,
+  type PassportSigningMode,
   type PassportVerification,
   type StoredPassport,
 } from '../lib/digitalPassport';
-import { formatDate } from '../lib/format';
+import {
+  buildPassportCardData,
+  exportPassportAsPdf,
+  exportPassportAsPng,
+  passportCardToPngBlob,
+} from '../lib/passportExport';
+import { formatDate, localiseNumber } from '../lib/format';
 import { printElement } from '../lib/exporters';
 import { appUrl, safeFilename, share, shareOutcomeKey, shareableFile } from '../lib/share';
 
@@ -60,7 +68,9 @@ export default function PassportPage() {
 
   const [stored, setStored] = useState<StoredPassport[]>(() => loadPassports());
   const [profileId, setProfileId] = useState<string>(profiles[0]?.id ?? '');
+  const [signingMode, setSigningMode] = useState<PassportSigningMode>('device-hmac');
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState<'pdf' | 'png' | null>(null);
   const [verifyInput, setVerifyInput] = useState('');
   const [verification, setVerification] = useState<PassportVerification | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StoredPassport | null>(null);
@@ -95,6 +105,16 @@ export default function PassportPage() {
     [active, selectedProfile],
   );
 
+  const cardData = useMemo(() => {
+    if (!active) return null;
+    return buildPassportCardData({
+      passport: active,
+      profile: selectedProfile,
+      language,
+      vaccineNameById,
+    });
+  }, [active, selectedProfile, language, vaccineNameById]);
+
   useEffect(() => {
     if (profiles.length === 0) return;
     if (!profileId || !profiles.some((profile) => profile.id === profileId)) {
@@ -111,7 +131,7 @@ export default function PassportPage() {
 
     setBusy(true);
     try {
-      const result = await issuePassport({ profile });
+      const result = await issuePassport({ profile, mode: signingMode });
       if (!result.passport) {
         toast.error(t('passport.generateFailed'), t('passport.error.tooLarge'));
         return;
@@ -152,7 +172,7 @@ export default function PassportPage() {
     } finally {
       setBusy(false);
     }
-  }, [profileId, profiles, t, toast]);
+  }, [profileId, profiles, signingMode, t, toast]);
 
   const handleVerify = async () => {
     const payload = verifyInput.trim();
@@ -184,12 +204,12 @@ export default function PassportPage() {
     if (!active) return;
 
     const title = `${t('passport.certificate')} — ${active.memberName}`;
-    // `svg` is optional: a passport restored from a backup may carry only the
-    // signed payload. Then the payload is what gets shared, and it still
-    // verifies on the other device.
-    const blob = active.svg ? await passportSvgToPngBlob(active.svg, 3) : null;
+    // Prefer sharing the full high-resolution Vaccination Passport Card PNG;
+    // fall back to the QR SVG raster or raw signed payload if needed.
+    const cardBlob = cardData ? await passportCardToPngBlob(cardData) : null;
+    const blob = cardBlob ?? (active.svg ? await passportSvgToPngBlob(active.svg, 3) : null);
     const file = blob
-      ? shareableFile(blob, `tikatrack-passport-${safeFilename(active.memberName)}.png`)
+      ? shareableFile(blob, `tikatrack-vaccination-passport-${safeFilename(active.memberName)}.png`)
       : null;
 
     const outcome = await share({
@@ -204,6 +224,50 @@ export default function PassportPage() {
     else if (key) toast.info(t(key));
   };
 
+  const handleDownloadPassportPdf = async () => {
+    if (!cardData) return;
+    setExporting('pdf');
+    try {
+      await exportPassportAsPdf(cardData);
+      toast.success(t('passport.download.pdfDone'));
+    } catch {
+      toast.error(t('common.status.error'));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleDownloadCardPNG = async () => {
+    if (!cardData) return;
+    setExporting('png');
+    try {
+      const cardBlob = await exportPassportAsPng(cardData);
+      if (cardBlob) {
+        toast.success(t('passport.download.cardDone'));
+        return;
+      }
+      // Fallback to QR SVG -> PNG if full card canvas could not render
+      if (active?.svg) {
+        const qrBlob = await passportSvgToPngBlob(active.svg, 3);
+        if (qrBlob) {
+          const url = URL.createObjectURL(qrBlob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = `tikatrack-passport-${safeFilename(active.memberName)}.png`;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 0);
+          toast.success(t('passport.download.cardDone'));
+          return;
+        }
+      }
+      toast.error(t('common.status.error'));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const handleDownloadSVG = () => {
     if (!active?.svg) return;
     downloadTextAsFile(
@@ -212,24 +276,6 @@ export default function PassportPage() {
       'image/svg+xml',
     );
     toast.success(t('passport.download.svg'));
-  };
-
-  const handleDownloadPNG = async () => {
-    if (!active?.svg) return;
-    const blob = await passportSvgToPngBlob(active.svg, 3);
-    if (!blob) {
-      toast.error(t('common.status.error'));
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `tikatrack-passport-${active.memberName.replace(/\s+/g, '-')}.png`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    toast.success(t('passport.download.png'));
   };
 
   const handleDownloadJSON = () => {
@@ -341,6 +387,19 @@ export default function PassportPage() {
                     {profile.name} — {formatDate(profile.dateOfBirth, language)}
                   </option>
                 ))}
+              </select>
+
+              <label className="label mt-4" htmlFor="passport-signing-mode">
+                {t('passport.mode.label')}
+              </label>
+              <select
+                id="passport-signing-mode"
+                className="input-field"
+                value={signingMode}
+                onChange={(event) => setSigningMode(event.target.value as PassportSigningMode)}
+              >
+                <option value="device-hmac">{t('passport.mode.deviceHmac')}</option>
+                <option value="portable-ecdsa">{t('passport.mode.portableEcdsa')}</option>
               </select>
 
               <div className="mt-4 flex flex-wrap gap-3">
@@ -466,6 +525,17 @@ export default function PassportPage() {
                           <dd>{t('passport.verify.doses', verification.passport.doses.length)}</dd>
                         </div>
                       </dl>
+                      {verification.passport.algorithm === 'ecdsa-p256' && (
+                        <p
+                          className={`mt-3 flex items-start gap-2 text-xs text-emerald-900/80 dark:text-emerald-100/80 ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          <ShieldCheck
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          {t('passport.verify.algorithmEcdsa')}
+                        </p>
+                      )}
                       {verification.warnings.includes('weak-algorithm') && (
                         <p
                           className={`mt-3 flex items-start gap-2 text-xs text-emerald-900/80 dark:text-emerald-100/80 ${isBangla ? 'font-bangla' : ''}`}
@@ -549,36 +619,99 @@ export default function PassportPage() {
                     </button>
                   </div>
                 )}
-                <div ref={setPrintRef} className="print-area">
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-6 text-center dark:border-emerald-900 dark:bg-white">
-                    <p className="text-xs font-semibold tracking-widest text-emerald-700 uppercase">
-                      TikaTrack · {t('passport.certificate')}
-                    </p>
-                    <h2 className="mt-2 text-xl font-bold text-neutral-900">{active.memberName}</h2>
-                    <p className="mt-1 text-sm text-neutral-600">
-                      {t('passport.dob')}: {formatDate(active.dateOfBirth, language)}
-                    </p>
-
-                    <div
-                      className="mx-auto mt-5 w-fit rounded-xl bg-white p-3"
-                      // The SVG is generated locally from our own encoder and contains no script.
-                      dangerouslySetInnerHTML={{ __html: rendered.svg }}
-                    />
-
-                    <p className="mt-4 text-xs text-neutral-500">
-                      {t('passport.id')}: <span className="font-mono">{active.id}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      {t('passport.issued')}: {formatDate(active.issuedAt, language)}
-                    </p>
-                    <p className="mt-3 text-[11px] text-neutral-400">
-                      {t('passport.scanToVerify')}
-                    </p>
+                <div
+                  ref={setPrintRef}
+                  className="print-area overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  {/* Passport Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-emerald-800 to-emerald-700 px-5 py-4 text-white">
+                    <div>
+                      <p className="text-[11px] font-semibold tracking-widest text-emerald-200 uppercase">
+                        TikaTrack · {t('passport.certificate')}
+                      </p>
+                      <h2 className={`mt-0.5 text-xl font-bold ${isBangla ? 'font-bangla' : ''}`}>
+                        {cardData?.memberName ?? active.memberName}
+                      </h2>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-medium text-emerald-200">{t('passport.id')}</p>
+                      <p className="font-mono text-xs font-semibold tabular-nums">{active.id}</p>
+                    </div>
                   </div>
 
+                  {/* Holder Metadata & QR Block */}
+                  <div className="grid gap-5 border-b border-neutral-200 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center dark:border-neutral-800">
+                    <div>
+                      <p
+                        className={`text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                      >
+                        <span className="font-medium text-neutral-900 dark:text-white">
+                          {t('passport.dob')}:
+                        </span>{' '}
+                        <span className="tabular-nums">
+                          {cardData?.dateOfBirthFormatted ?? formatDate(active.dateOfBirth, language)}
+                        </span>
+                        {cardData?.ageFormatted ? ` · ${cardData.ageFormatted}` : ''}
+                        {cardData?.relationshipLabel ? ` · ${cardData.relationshipLabel}` : ''}
+                      </p>
+
+                      <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                        <div>
+                          <dt
+                            className={`text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                          >
+                            {t('passport.doses')}
+                          </dt>
+                          <dd className="mt-0.5 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                            {localiseNumber(cardData?.totalDoseCount ?? 0, language)}
+                          </dd>
+                        </div>
+                        {cardData?.coveragePercentage !== undefined ? (
+                          <div>
+                            <dt
+                              className={`text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                            >
+                              {t('passport.card.coverage')}
+                            </dt>
+                            <dd className="mt-0.5 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                              {localiseNumber(cardData.coveragePercentage, language)}%
+                            </dd>
+                          </div>
+                        ) : (
+                          <div>
+                            <dt
+                              className={`text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                            >
+                              {t('passport.issued')}
+                            </dt>
+                            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900 dark:text-white">
+                              {formatDate(active.issuedAt, language)}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+
+                      <p className="mt-3 text-xs text-neutral-500 tabular-nums dark:text-neutral-400">
+                        {t('passport.issued')}: {formatDate(active.issuedAt, language)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-center rounded-xl border border-neutral-200 bg-white p-2.5 dark:border-neutral-700">
+                      <div
+                        className="w-fit"
+                        // The SVG is generated locally from our own encoder and contains no script.
+                        dangerouslySetInnerHTML={{ __html: rendered.svg }}
+                      />
+                      <p className="mt-1.5 text-[11px] font-medium text-neutral-600">
+                        {t('passport.scanToVerify')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Truncated warning */}
                   {(active.omittedDoses ?? 0) > 0 && (
                     <p
-                      className={`mt-5 flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+                      className={`mx-5 mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
                     >
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       {t(
@@ -590,76 +723,141 @@ export default function PassportPage() {
                     </p>
                   )}
 
-                  {dosesInPayload(active.payload, vaccineNameById, language).length > 0 && (
-                    <ul className="mt-5 grid gap-2 sm:grid-cols-2">
-                      {dosesInPayload(active.payload, vaccineNameById, language).map((dose) => (
-                        <li
-                          key={`${dose.vaccineId}-${dose.doseNumber ?? 'x'}-${dose.date}`}
-                          className="flex items-start gap-2 rounded-lg bg-neutral-50 p-2.5 text-sm dark:bg-neutral-800"
-                        >
-                          <BadgeCheck
-                            className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
-                            aria-hidden="true"
-                          />
-                          <span className={isBangla ? 'font-bangla' : undefined}>
-                            <strong>{dose.name}</strong>
-                            {/* Which dose of the series this is — or an explicit
-                                statement that the record never said. */}
-                            <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">
-                              {dose.doseNumber === null
-                                ? t('passport.dose.unnumbered')
-                                : t('passport.dose.number', dose.doseNumber)}
-                            </span>
-                            <span className="block text-xs text-neutral-500 dark:text-neutral-400">
-                              {formatDate(dose.date, language)}
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {/* Immunization History Ledger Table */}
+                  <div className="p-5">
+                    <h3
+                      className={`text-xs font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t('passport.card.historyTitle')}
+                    </h3>
+
+                    {(cardData?.doses.length ?? 0) === 0 ? (
+                      <p
+                        className={`mt-3 text-sm text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                      >
+                        {t('passport.noDoses')}
+                      </p>
+                    ) : (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-neutral-200 text-xs font-semibold text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                              <th className="py-2 pr-3">{t('passport.card.colVaccine')}</th>
+                              <th className="py-2 px-2">{t('passport.card.colDose')}</th>
+                              <th className="py-2 px-2">{t('passport.card.colDate')}</th>
+                              <th className="py-2 pl-2">{t('passport.card.colCentre')}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                            {cardData?.doses.map((dose) => (
+                              <tr
+                                key={`${dose.vaccineId}-${dose.doseNumber ?? 'x'}-${dose.date}-${dose.centre ?? ''}`}
+                              >
+                                <td className="py-2 pr-3 font-medium text-neutral-900 dark:text-white">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <BadgeCheck
+                                      className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                                      aria-hidden="true"
+                                    />
+                                    <span className={isBangla ? 'font-bangla' : undefined}>
+                                      {dose.name}
+                                    </span>
+                                  </span>
+                                </td>
+                                <td
+                                  className={`py-2 px-2 text-xs text-emerald-700 dark:text-emerald-400 whitespace-nowrap ${isBangla ? 'font-bangla' : ''}`}
+                                >
+                                  {dose.doseNumber === null
+                                    ? t('passport.dose.unnumbered')
+                                    : t('passport.dose.number', dose.doseNumber)}
+                                </td>
+                                <td className="py-2 px-2 text-xs tabular-nums text-neutral-700 dark:text-neutral-300 whitespace-nowrap">
+                                  {dose.dateFormatted}
+                                </td>
+                                <td className="py-2 pl-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {dose.centre ?? '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap gap-2 no-print">
-                  <button
-                    type="button"
-                    className="btn-secondary btn-sm"
-                    onClick={handleDownloadSVG}
-                  >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('passport.download.svg')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary btn-sm"
-                    onClick={() => void handleDownloadPNG()}
-                  >
-                    <Image className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('passport.download.png')}
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={handleDownloadJSON}>
-                    <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('passport.download.json')}
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={handlePrint}>
-                    <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('passport.print')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    onClick={() => void handleShare()}
-                  >
-                    <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('passport.share.button')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm ml-auto text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                    onClick={() => setConfirmDelete(active)}
-                  >
-                    {t('common.actions.delete')}
-                  </button>
+                {/* Primary Vaccination Passport Download CTA + Secondary Format Controls */}
+                <div className="mt-5 space-y-3 no-print">
+                  <div className="flex flex-wrap gap-2.5">
+                    <button
+                      type="button"
+                      className="btn-primary whitespace-nowrap shrink-0"
+                      disabled={exporting !== null}
+                      onClick={() => void handleDownloadPassportPdf()}
+                    >
+                      <FileText className="h-4 w-4" aria-hidden="true" />
+                      <span className={isBangla ? 'font-bangla' : undefined}>
+                        {exporting === 'pdf'
+                          ? t('common.status.loading')
+                          : t('passport.download.passportPdf')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary whitespace-nowrap shrink-0"
+                      disabled={exporting !== null}
+                      onClick={() => void handleDownloadCardPNG()}
+                    >
+                      <Image className="h-4 w-4" aria-hidden="true" />
+                      <span className={isBangla ? 'font-bangla' : undefined}>
+                        {exporting === 'png'
+                          ? t('common.status.loading')
+                          : t('passport.download.cardPng')}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                      onClick={handleDownloadSVG}
+                    >
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('passport.download.svg')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                      onClick={handleDownloadJSON}
+                    >
+                      <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('passport.download.json')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                      onClick={handlePrint}
+                    >
+                      <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('passport.print')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                      onClick={() => void handleShare()}
+                    >
+                      <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('passport.share.button')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm ml-auto text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 whitespace-nowrap shrink-0"
+                      onClick={() => setConfirmDelete(active)}
+                    >
+                      {t('common.actions.delete')}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  Bot,
+  BookmarkCheck,
+  BookmarkPlus,
   BookOpen,
+  Bot,
   Check,
   Copy,
   Eraser,
+  ExternalLink,
+  Globe,
+  HardDrive,
+  Image as ImageIcon,
   Loader2,
+  MessageSquare,
+  Mic,
   Phone,
   Send,
   ShieldCheck,
   Sparkles,
+  Square,
   UserRound,
+  Volume2,
 } from 'lucide-react';
 
+import { LiveVoicePanel } from '../components/tikabot/LiveVoicePanel';
+import { PosterStudio } from '../components/tikabot/PosterStudio';
+import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { usePersistentState } from '../hooks';
@@ -29,6 +42,7 @@ import {
   suggestedQuestions,
 } from '../lib/ragEngine';
 import { faqDatabase } from '../data/tikabot';
+import { saveStudioNoteToFirestore } from '../services/cloudSync';
 import type { ChatMessage } from '../types';
 import type { Language } from '../i18n/types';
 
@@ -36,7 +50,22 @@ const HISTORY_KEY = 'tikatrack.tikabot-history';
 const CONTEXT_KEY = 'tikatrack.tikabot-context-profile';
 const MAX_HISTORY = 40;
 
-/** Shape persisted in localStorage; validated on read so junk cannot crash us. */
+type StudioTab = 'chat' | 'voice' | 'studio';
+type EngineKind = 'gemini' | 'offline';
+type GeminiTier = 'fast' | 'balanced' | 'deep';
+
+interface GroundingSource {
+  title: string;
+  url: string;
+}
+
+interface PersistedBotMessage extends ChatMessage {
+  sources?: string[];
+  relatedQuestions?: string[];
+  groundingSources?: GroundingSource[];
+  modelUsed?: string;
+}
+
 function isStoredMessages(value: unknown): value is ChatMessage[] {
   if (!Array.isArray(value)) return false;
   return value.every(
@@ -49,30 +78,17 @@ function isStoredMessages(value: unknown): value is ChatMessage[] {
   );
 }
 
-interface PersistedBotMessage extends ChatMessage {
-  sources?: string[];
-  relatedQuestions?: string[];
-}
-
-/**
- * `/tikabot` — the assistant.
- *
- * Answers come from `ragEngine`, which ranks the bundled FAQ data and the
- * vaccine catalogue and returns *quotations*, never generated prose. Two rules
- * follow from that and should not be relaxed:
- *
- *   - every answer shows its source, and a low-confidence match says so;
- *   - an urgent query always surfaces the emergency guidance and the hotline,
- *     even when the retrieval score is weak.
- *
- * The "typing" delay is a short timeout so the transcript does not feel like it
- * glitched; it is tracked and cleared on unmount, which the original app's
- * bare `setTimeout` was not.
- */
 export default function TikabotPage() {
   const { t, language } = useI18n();
   const toast = useToast();
+  const { firebaseUser, getFirebaseIdToken } = useAuth();
+  const { profiles } = useProfiles();
   const isBangla = language === 'bn';
+
+  const [studioTab, setStudioTab] = useState<StudioTab>('chat');
+  const [engine, setEngine] = useState<EngineKind>('gemini');
+  const [tier, setTier] = useState<GeminiTier>('balanced');
+  const [useSearch, setUseSearch] = useState(true);
 
   const [messages, setMessages] = usePersistentState<ChatMessage[]>(
     HISTORY_KEY,
@@ -82,7 +98,8 @@ export default function TikabotPage() {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const { profiles } = useProfiles();
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [savedNoteIds, setSavedNoteIds] = useState<Record<string, boolean>>({});
   const [contextProfileId, setContextProfileId] = usePersistentState<string | null>(
     CONTEXT_KEY,
     null,
@@ -91,23 +108,22 @@ export default function TikabotPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimer = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const suggestions = useMemo(() => suggestedQuestions(language, 4), [language]);
 
-  /**
-   * The member this conversation is about, if the user picked one.
-   *
-   * Recomputed whenever the record or the language changes, so the block never
-   * quotes a stale age after someone records a dose mid-conversation.
-   */
   const personalContext = useMemo(() => {
     const member = profiles.find((profile) => profile.id === contextProfileId);
     return member ? buildBotContext(member, language) : null;
   }, [profiles, contextProfileId, language]);
-  // Corpus size is stable for the session; compute it once for the honesty panel.
+
+  const renderedContext = useMemo(
+    () => (personalContext ? renderBotContext(personalContext, language) : undefined),
+    [personalContext, language],
+  );
+
   const corpusSize = useMemo(() => getKnowledgeBase().length, []);
 
-  // Related-question chips resolve ids from the FAQ database into text.
   const relatedLookup = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of faqDatabase) map.set(entry.id, entry.question[language]);
@@ -117,16 +133,48 @@ export default function TikabotPage() {
   useEffect(() => {
     return () => {
       if (typingTimer.current !== null) window.clearTimeout(typingTimer.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     };
   }, []);
 
   useEffect(() => {
     const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, thinking]);
+    if (node && studioTab === 'chat') node.scrollTop = node.scrollHeight;
+  }, [messages, thinking, studioTab]);
+
+  const runOfflineRag = useCallback(
+    (text: string): PersistedBotMessage => {
+      const result = answer(text, language as Language);
+      const personalised =
+        personalContext && (shouldPersonalise(text) || result.fallback)
+          ? renderBotContext(personalContext, language)
+          : undefined;
+      const related = result.relatedIds
+        .map((id) => getDocument(id)?.title[language as Language] ?? relatedLookup.get(id))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 3);
+
+      return {
+        id: createMessageId(),
+        role: 'bot',
+        text: result.fallback ? t('tikabot.fallback') : result.text,
+        category: result.category,
+        confidence: result.confidence,
+        sources: result.sources,
+        relatedQuestions: related,
+        personalised,
+        modelUsed: 'offline-rag',
+        createdAt: Date.now(),
+      };
+    },
+    [language, personalContext, relatedLookup, t],
+  );
 
   const ask = useCallback(
-    (question: string) => {
+    async (question: string) => {
       const text = question.trim();
       if (!text || thinking) return;
 
@@ -136,51 +184,102 @@ export default function TikabotPage() {
         text,
         createdAt: Date.now(),
       };
+      const priorHistory = messages.slice(-12).map((m) => ({
+        role: m.role === 'user' ? ('user' as const) : ('model' as const),
+        text: m.text,
+      }));
+
       setMessages((previous) => [...previous, userMessage].slice(-MAX_HISTORY));
       setDraft('');
       setThinking(true);
 
-      const result = answer(text, language as Language);
+      const useOfflineOnly = engine === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false);
 
-      // Only for questions about timing, or when the corpus had nothing: a
-      // sourced answer about side effects should not be diluted with schedule
-      // arithmetic the user did not ask for.
-      const personalised =
-        personalContext && (shouldPersonalise(text) || result.fallback)
-          ? renderBotContext(personalContext, language)
-          : undefined;
+      if (useOfflineOnly) {
+        typingTimer.current = window.setTimeout(() => {
+          const botMessage = runOfflineRag(text);
+          setMessages((previous) => [...previous, botMessage].slice(-MAX_HISTORY));
+          setThinking(false);
+          typingTimer.current = null;
+          inputRef.current?.focus();
+        }, 280);
+        return;
+      }
 
-      // Retrieval is synchronous; the delay is purely conversational pacing.
-      typingTimer.current = window.setTimeout(() => {
-        const related = result.relatedIds
-          .map((id) => getDocument(id)?.title[language as Language] ?? relatedLookup.get(id))
-          .filter((value): value is string => Boolean(value))
-          .slice(0, 3);
+      try {
+        const token = await getFirebaseIdToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            message: text,
+            history: priorHistory,
+            language,
+            mode: tier,
+            useSearchGrounding: useSearch && tier !== 'fast',
+            profileContext: renderedContext,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error (${response.status})`);
+        }
+
+        const data = (await response.json()) as {
+          text?: string;
+          modelUsed?: string;
+          groundingSources?: GroundingSource[];
+        };
+
+        if (!data.text?.trim()) {
+          throw new Error('Empty response');
+        }
 
         const botMessage: PersistedBotMessage = {
           id: createMessageId(),
           role: 'bot',
-          text: result.fallback ? t('tikabot.fallback') : result.text,
-          category: result.category,
-          confidence: result.confidence,
-          sources: result.sources,
-          relatedQuestions: related,
-          personalised,
+          text: data.text.trim(),
+          modelUsed: data.modelUsed || (tier === 'fast' ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen'),
+          groundingSources: data.groundingSources ?? [],
+          personalised:
+            personalContext && shouldPersonalise(text) ? renderedContext : undefined,
           createdAt: Date.now(),
         };
 
         setMessages((previous) => [...previous, botMessage].slice(-MAX_HISTORY));
+      } catch {
+        // Seamless offline RAG fallback so guidance is never interrupted.
+        const fallbackMsg = runOfflineRag(text);
+        setMessages((previous) => [...previous, fallbackMsg].slice(-MAX_HISTORY));
+        toast.info(t('tikabot.fallbackUsed'));
+      } finally {
         setThinking(false);
-        typingTimer.current = null;
         inputRef.current?.focus();
-      }, 320);
+      }
     },
-    [language, personalContext, relatedLookup, setMessages, t, thinking],
+    [
+      engine,
+      getFirebaseIdToken,
+      language,
+      messages,
+      personalContext,
+      renderedContext,
+      runOfflineRag,
+      setMessages,
+      t,
+      thinking,
+      tier,
+      toast,
+      useSearch,
+    ],
   );
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    ask(draft);
+    void ask(draft);
   };
 
   const handleClear = () => {
@@ -202,6 +301,64 @@ export default function TikabotPage() {
     }
   };
 
+  const handleSpeak = async (id: string, text: string) => {
+    if (speakingId === id && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setSpeakingId(null);
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    setSpeakingId(id);
+    try {
+      const res = await fetch('/api/ai/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language }),
+      });
+      if (!res.ok) throw new Error('TTS request failed');
+      const data = (await res.json()) as { audioBase64?: string; mimeType?: string };
+      if (!data.audioBase64) throw new Error('No audio');
+
+      const audio = new Audio(`data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`);
+      audioRef.current = audio;
+      audio.onended = () => {
+        setSpeakingId((curr) => (curr === id ? null : curr));
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setSpeakingId((curr) => (curr === id ? null : curr));
+        audioRef.current = null;
+      };
+      await audio.play();
+    } catch {
+      setSpeakingId(null);
+      toast.error(t('tikabot.ttsError'));
+    }
+  };
+
+  const handleSaveNote = async (bot: PersistedBotMessage) => {
+    if (!firebaseUser) return;
+    try {
+      const title = bot.text.split('\n')[0].slice(0, 120) || 'TikaBot Note';
+      await saveStudioNoteToFirestore(
+        firebaseUser.uid,
+        title,
+        bot.text,
+        bot.modelUsed || 'gemini-4-hydrogen',
+      );
+      setSavedNoteIds((prev) => ({ ...prev, [bot.id]: true }));
+      toast.success(t('tikabot.noteSaved'));
+    } catch {
+      toast.error(t('common.status.error'));
+    }
+  };
+
   const band = (confidence?: number) =>
     confidence === undefined ? 'low' : confidenceBand(confidence);
 
@@ -217,320 +374,514 @@ export default function TikabotPage() {
   };
 
   return (
-    <div className="page-shell max-w-4xl">
-      <header className="no-print">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Bot className="h-4 w-4" aria-hidden="true" />
-          {t('nav.tikabot')}
-        </p>
-        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
-          {t('tikabot.title')}
-        </h1>
-        <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
-          {t('tikabot.subtitle')}
-        </p>
+    <div className="page-shell max-w-5xl">
+      <header className="no-print flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
+            <Bot className="h-4 w-4" aria-hidden="true" />
+            {t('nav.tikabot')}
+          </p>
+          <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
+            {t('tikabot.title')}
+          </h1>
+          <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
+            {t('tikabot.subtitle')}
+          </p>
+        </div>
+
+        {/* Clean 3-tab Studio Workspace Switcher */}
+        <div
+          className="inline-flex rounded-xl border border-neutral-200 bg-white p-1 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+          role="tablist"
+          aria-label={t('tikabot.studioTabs')}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studioTab === 'chat'}
+            onClick={() => setStudioTab('chat')}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              studioTab === 'chat'
+                ? 'bg-emerald-600 text-white'
+                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
+            }`}
+          >
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.chat')}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studioTab === 'voice'}
+            onClick={() => setStudioTab('voice')}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              studioTab === 'voice'
+                ? 'bg-emerald-600 text-white'
+                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
+            }`}
+          >
+            <Mic className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.voice')}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studioTab === 'studio'}
+            onClick={() => setStudioTab('studio')}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              studioTab === 'studio'
+                ? 'bg-emerald-600 text-white'
+                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
+            }`}
+          >
+            <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.studio')}</span>
+          </button>
+        </div>
       </header>
 
-      <div className="card mt-6 flex h-[70vh] min-h-[32rem] flex-col overflow-hidden">
-        {/* --- Transcript -------------------------------------------------- */}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-          <div className="flex gap-3">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-              aria-hidden="true"
-            >
-              <Bot className="h-5 w-5" />
-            </span>
-            <div className="card max-w-[85%] rounded-tl-none bg-neutral-50 p-3 text-sm dark:bg-neutral-800">
-              <p className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.greeting')}</p>
-            </div>
-          </div>
+      <div className="card mt-6 flex min-h-[34rem] flex-col overflow-hidden">
+        {studioTab === 'voice' && <LiveVoicePanel profileContextSummary={renderedContext} />}
 
-          {messages.length === 0 && (
-            <div className="space-y-4 pl-12">
-              <div>
-                <p
-                  className={`text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+        {studioTab === 'studio' && <PosterStudio />}
+
+        {studioTab === 'chat' && (
+          <div className="flex h-[70vh] min-h-[34rem] flex-col">
+            {/* Engine + Reasoning Tier Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/70 px-4 py-2.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/80">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEngine('gemini')}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                    engine === 'gemini'
+                      ? 'bg-emerald-600 text-white'
+                      : 'border border-neutral-200 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
+                  }`}
                 >
-                  {t('tikabot.topics.label')}
-                </p>
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {(['epi', 'effects', 'missed', 'tt', 'travel'] as const).map((topic) => (
-                    <li key={topic}>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
-                        onClick={() => ask(t(`tikabot.topics.${topic}Query`))}
-                      >
-                        <span className={isBangla ? 'font-bangla' : undefined}>
-                          {t(`tikabot.topics.${topic}`)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('tikabot.engine.gemini')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEngine('offline')}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                    engine === 'offline'
+                      ? 'bg-emerald-600 text-white'
+                      : 'border border-neutral-200 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
+                  }`}
+                >
+                  <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('tikabot.engine.offline')}</span>
+                </button>
               </div>
 
-              <div>
-                <p
-                  className={`text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
-                >
-                  {t('tikabot.suggestions')}
-                </p>
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {suggestions.map((question) => (
-                    <li key={question}>
+              {engine === 'gemini' && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-800">
+                    {(['fast', 'balanced', 'deep'] as const).map((modeOption) => (
                       <button
+                        key={modeOption}
                         type="button"
-                        className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 transition-colors hover:bg-emerald-50 dark:border-emerald-900 dark:bg-neutral-900 dark:text-emerald-300 dark:hover:bg-neutral-800"
-                        onClick={() => ask(question)}
+                        onClick={() => setTier(modeOption)}
+                        className={`rounded-md px-2 py-1 font-medium whitespace-nowrap transition-colors ${
+                          tier === modeOption
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
+                        }`}
                       >
-                        <span className={isBangla ? 'font-bangla' : undefined}>{question}</span>
+                        {t(`tikabot.tier.${modeOption}`)}
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
+                    ))}
+                  </div>
 
-          {messages.map((message) => {
-            const isUser = message.role === 'user';
-            const bot = message as PersistedBotMessage;
-            return (
-              <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : ''}`}>
-                {!isUser && (
+                  {tier !== 'fast' && (
+                    <button
+                      type="button"
+                      onClick={() => setUseSearch((v) => !v)}
+                      aria-pressed={useSearch}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium whitespace-nowrap transition-colors ${
+                        useSearch
+                          ? 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-200'
+                          : 'border-neutral-200 bg-white text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
+                      }`}
+                    >
+                      <Globe className="h-3 w-3" aria-hidden="true" />
+                      <span>{t('tikabot.searchGrounding')}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Transcript */}
+            <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+              <div className="flex gap-3">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                  aria-hidden="true"
+                >
+                  <Bot className="h-5 w-5" />
+                </span>
+                <div className="card max-w-[85%] rounded-tl-none bg-neutral-50 p-3 text-sm dark:bg-neutral-800">
+                  <p className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.greeting')}</p>
+                </div>
+              </div>
+
+              {messages.length === 0 && (
+                <div className="space-y-4 pl-12">
+                  <div>
+                    <p
+                      className={`text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t('tikabot.topics.label')}
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {(['epi', 'effects', 'missed', 'tt', 'travel'] as const).map((topic) => (
+                        <li key={topic}>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
+                            onClick={() => void ask(t(`tikabot.topics.${topic}Query`))}
+                          >
+                            <span className={isBangla ? 'font-bangla' : undefined}>
+                              {t(`tikabot.topics.${topic}`)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p
+                      className={`text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t('tikabot.suggestions')}
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {suggestions.map((question) => (
+                        <li key={question}>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 transition-colors hover:bg-emerald-50 dark:border-emerald-900 dark:bg-neutral-900 dark:text-emerald-300 dark:hover:bg-neutral-800"
+                            onClick={() => void ask(question)}
+                          >
+                            <span className={isBangla ? 'font-bangla' : undefined}>{question}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {messages.map((message) => {
+                const isUser = message.role === 'user';
+                const bot = message as PersistedBotMessage;
+                return (
+                  <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : ''}`}>
+                    {!isUser && (
+                      <span
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                        aria-hidden="true"
+                      >
+                        <Bot className="h-5 w-5" />
+                      </span>
+                    )}
+
+                    <div
+                      className={`max-w-[85%] rounded-2xl p-3.5 text-sm ${
+                        isUser
+                          ? 'rounded-tr-none bg-emerald-600 text-white'
+                          : 'card rounded-tl-none bg-neutral-50 dark:bg-neutral-800'
+                      }`}
+                    >
+                      <p
+                        className={`whitespace-pre-line leading-relaxed ${isBangla ? 'font-bangla' : ''}`}
+                        lang={language}
+                      >
+                        {message.text}
+                      </p>
+
+                      {bot.personalised && (
+                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">
+                          <p
+                            className={`flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 ${isBangla ? 'font-bangla' : ''}`}
+                          >
+                            <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                            {t('tikabot.context.title')}
+                          </p>
+                          <p
+                            className="mt-1.5 whitespace-pre-line text-xs text-emerald-950 dark:text-emerald-100"
+                            lang={language}
+                          >
+                            {bot.personalised}
+                          </p>
+                          <p
+                            className={`mt-2 text-[11px] text-emerald-900/70 dark:text-emerald-200/70 ${isBangla ? 'font-bangla' : ''}`}
+                          >
+                            {t('tikabot.context.source')}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Search Grounding clickable links */}
+                      {!isUser && bot.groundingSources && bot.groundingSources.length > 0 && (
+                        <div className="mt-3 border-t border-neutral-200 pt-2.5 dark:border-neutral-700">
+                          <p className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+                            {t('tikabot.verifiedSources')}
+                          </p>
+                          <ul className="mt-1.5 flex flex-wrap gap-2">
+                            {bot.groundingSources
+                              .filter((src) => src.url.startsWith('https://') || src.url.startsWith('http://'))
+                              .map((src) => (
+                                <li key={src.url}>
+                                  <a
+                                    href={src.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50/70 px-2 py-1 text-xs font-medium text-sky-800 hover:underline dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300"
+                                  >
+                                    <span className="max-w-[14rem] truncate">{src.title}</span>
+                                    <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                  </a>
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isUser && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-700">
+                          {bot.confidence !== undefined && (
+                            <span
+                              className={bandClass(bot.confidence)}
+                              title={`${t('tikabot.confidence')}: ${Math.round(bot.confidence * 100)}%`}
+                            >
+                              <Sparkles className="h-3 w-3" aria-hidden="true" />
+                              {t('tikabot.confidence')} {Math.round(bot.confidence * 100)}%
+                            </span>
+                          )}
+                          {bot.modelUsed && bot.modelUsed !== 'offline-rag' && (
+                            <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                              {bot.modelUsed}
+                            </span>
+                          )}
+                          {bot.sources?.map((source) => (
+                            <span key={source} className="text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+                              <BookOpen className="mr-1 inline h-3 w-3" aria-hidden="true" />
+                              {source}
+                            </span>
+                          ))}
+
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleSpeak(message.id, message.text)}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                              aria-label={speakingId === message.id ? t('tikabot.stopAudio') : t('tikabot.listen')}
+                            >
+                              {speakingId === message.id ? (
+                                <Square className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                              ) : (
+                                <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              <span>
+                                {speakingId === message.id ? t('tikabot.stopAudio') : t('tikabot.listen')}
+                              </span>
+                            </button>
+
+                            {firebaseUser && (
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveNote(bot)}
+                                disabled={Boolean(savedNoteIds[message.id])}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                              >
+                                {savedNoteIds[message.id] ? (
+                                  <BookmarkCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                                ) : (
+                                  <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
+                                <span>
+                                  {savedNoteIds[message.id]
+                                    ? t('tikabot.savedNote')
+                                    : t('tikabot.saveNote')}
+                                </span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyAnswer(message.id, message.text, bot.personalised)}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                              aria-label={t('tikabot.copyAnswer')}
+                            >
+                              {copiedId === message.id ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              <span className={isBangla ? 'font-bangla' : undefined}>
+                                {copiedId === message.id ? t('tikabot.copied') : t('tikabot.copyAnswer')}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isUser && bot.relatedQuestions && bot.relatedQuestions.length > 0 && (
+                        <div className="mt-3">
+                          <p
+                            className={`text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                          >
+                            {t('tikabot.relatedQuestions')}
+                          </p>
+                          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                            {bot.relatedQuestions.map((question) => (
+                              <li key={question}>
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-neutral-200 px-2.5 py-1 text-xs text-neutral-700 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+                                  onClick={() => void ask(question)}
+                                >
+                                  <span className={isBangla ? 'font-bangla' : undefined}>
+                                    {question}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isUser && bot.confidence !== undefined && band(bot.confidence) === 'low' && (
+                        <p className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className={isBangla ? 'font-bangla' : undefined}>
+                            {t('tracker.medicalAdvice')}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+
+                    {isUser && (
+                      <span
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200"
+                        aria-hidden="true"
+                      >
+                        <ShieldCheck className="h-5 w-5" />
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {thinking && (
+                <div className="flex gap-3">
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                     aria-hidden="true"
                   >
                     <Bot className="h-5 w-5" />
                   </span>
-                )}
-
-                <div
-                  className={`max-w-[85%] rounded-2xl p-3 text-sm ${
-                    isUser
-                      ? 'rounded-tr-none bg-emerald-600 text-white'
-                      : 'card rounded-tl-none bg-neutral-50 dark:bg-neutral-800'
-                  }`}
-                >
-                  <p
-                    className={`whitespace-pre-line ${isBangla ? 'font-bangla' : ''}`}
-                    lang={language}
-                  >
-                    {message.text}
-                  </p>
-
-                  {bot.personalised && (
-                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">
-                      <p
-                        className={`flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 ${isBangla ? 'font-bangla' : ''}`}
-                      >
-                        <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-                        {t('tikabot.context.title')}
-                      </p>
-                      <p
-                        className="mt-1.5 whitespace-pre-line text-xs text-emerald-950 dark:text-emerald-100"
-                        lang={language}
-                      >
-                        {bot.personalised}
-                      </p>
-                      <p
-                        className={`mt-2 text-[11px] text-emerald-900/70 dark:text-emerald-200/70 ${isBangla ? 'font-bangla' : ''}`}
-                      >
-                        {t('tikabot.context.source')}
-                      </p>
-                    </div>
-                  )}
-
-                  {!isUser && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-700">
-                      {bot.confidence !== undefined && (
-                        <span
-                          className={bandClass(bot.confidence)}
-                          title={`${t('tikabot.confidence')}: ${Math.round(bot.confidence * 100)}%`}
-                        >
-                          <Sparkles className="h-3 w-3" aria-hidden="true" />
-                          {t('tikabot.confidence')} {Math.round(bot.confidence * 100)}%
-                        </span>
-                      )}
-                      {bot.sources?.map((source) => (
-                        <span key={source} className="badge-neutral">
-                          <BookOpen className="h-3 w-3" aria-hidden="true" />
-                          {source}
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => void handleCopyAnswer(message.id, message.text, bot.personalised)}
-                        className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
-                        aria-label={t('tikabot.copyAnswer')}
-                      >
-                        {copiedId === message.id ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                        <span className={isBangla ? 'font-bangla' : undefined}>
-                          {copiedId === message.id ? t('tikabot.copied') : t('tikabot.copyAnswer')}
-                        </span>
-                      </button>
-                    </div>
-                  )}
-
-                  {!isUser && bot.relatedQuestions && bot.relatedQuestions.length > 0 && (
-                    <div className="mt-3">
-                      <p
-                        className={`text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
-                      >
-                        {t('tikabot.relatedQuestions')}
-                      </p>
-                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                        {bot.relatedQuestions.map((question) => (
-                          <li key={question}>
-                            <button
-                              type="button"
-                              className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs text-neutral-700 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
-                              onClick={() => ask(question)}
-                            >
-                              <span className={isBangla ? 'font-bangla' : undefined}>
-                                {question}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {!isUser && bot.confidence !== undefined && band(bot.confidence) === 'low' && (
-                    <p className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span className={isBangla ? 'font-bangla' : undefined}>
-                        {t('tracker.medicalAdvice')}
-                      </span>
-                    </p>
-                  )}
+                  <div className="card rounded-tl-none bg-neutral-50 p-3 text-sm text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span className={isBangla ? 'font-bangla' : undefined}>
+                      {t('tikabot.thinking')}
+                    </span>
+                  </div>
                 </div>
+              )}
+            </div>
 
-                {isUser && (
-                  <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200"
-                    aria-hidden="true"
-                  >
-                    <ShieldCheck className="h-5 w-5" />
-                  </span>
-                )}
-              </div>
-            );
-          })}
-
-          {thinking && (
-            <div className="flex gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                aria-hidden="true"
-              >
-                <Bot className="h-5 w-5" />
-              </span>
-              <div className="card rounded-tl-none bg-neutral-50 p-3 text-sm text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-                <Loader2 className="mr-2 inline h-4 w-4 animate-spin" aria-hidden="true" />
-                <span className={isBangla ? 'font-bangla' : undefined}>
-                  {t('tikabot.thinking')}
+            {profiles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-white px-3 py-2 sm:px-4 dark:border-neutral-800 dark:bg-neutral-900">
+                <label
+                  htmlFor="tikabot-context"
+                  className={`flex items-center gap-1.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t('tikabot.context.about')}
+                </label>
+                <select
+                  id="tikabot-context"
+                  className="input-field w-auto min-h-[36px] py-1 text-xs"
+                  value={contextProfileId ?? ''}
+                  onChange={(event) => setContextProfileId(event.target.value || null)}
+                >
+                  <option value="">{t('tikabot.context.everyone')}</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  className={`text-[11px] text-neutral-400 dark:text-neutral-500 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {t('tikabot.context.hint')}
                 </span>
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* --- Who is this about? ------------------------------------------ */}
-        {profiles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-white px-3 py-2 sm:px-4 dark:border-neutral-800 dark:bg-neutral-900">
-            <label
-              htmlFor="tikabot-context"
-              className={`flex items-center gap-1.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+            <form
+              onSubmit={handleSubmit}
+              className="border-t border-neutral-200 bg-white p-3 sm:p-4 dark:border-neutral-800 dark:bg-neutral-900"
             >
-              <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-              {t('tikabot.context.about')}
-            </label>
-            <select
-              id="tikabot-context"
-              className="input-field w-auto min-h-[36px] py-1 text-xs"
-              value={contextProfileId ?? ''}
-              onChange={(event) => setContextProfileId(event.target.value || null)}
-            >
-              <option value="">{t('tikabot.context.everyone')}</option>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </select>
-            <span
-              className={`text-[11px] text-neutral-400 dark:text-neutral-500 ${isBangla ? 'font-bangla' : ''}`}
-            >
-              {t('tikabot.context.hint')}
-            </span>
+              <div className="flex items-end gap-2">
+                <label className="sr-only" htmlFor="tikabot-input">
+                  {t('tikabot.inputPlaceholder')}
+                </label>
+                <textarea
+                  id="tikabot-input"
+                  ref={inputRef}
+                  rows={1}
+                  className="input-field max-h-32 min-h-[44px] flex-1 resize-y"
+                  placeholder={t('tikabot.inputPlaceholder')}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      void ask(draft);
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={thinking || draft.trim().length === 0}
+                  aria-label={t('tikabot.send')}
+                >
+                  <Send className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('tikabot.send')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={handleClear}
+                  disabled={messages.length === 0}
+                  aria-label={t('tikabot.clear')}
+                  title={t('tikabot.clear')}
+                >
+                  <Eraser className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.disclaimer')}</span>{' '}
+                <a className="link" href="tel:16263">
+                  16263
+                </a>
+              </p>
+            </form>
           </div>
         )}
-
-        {/* --- Composer ---------------------------------------------------- */}
-        <form
-          onSubmit={handleSubmit}
-          className="border-t border-neutral-200 bg-white p-3 sm:p-4 dark:border-neutral-800 dark:bg-neutral-900"
-        >
-          <div className="flex items-end gap-2">
-            <label className="sr-only" htmlFor="tikabot-input">
-              {t('tikabot.inputPlaceholder')}
-            </label>
-            <textarea
-              id="tikabot-input"
-              ref={inputRef}
-              rows={1}
-              className="input-field max-h-32 min-h-[44px] flex-1 resize-y"
-              placeholder={t('tikabot.inputPlaceholder')}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                // Enter sends, Shift+Enter inserts a newline.
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  ask(draft);
-                }
-              }}
-            />
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={thinking || draft.trim().length === 0}
-              aria-label={t('tikabot.send')}
-            >
-              <Send className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('tikabot.send')}</span>
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={handleClear}
-              disabled={messages.length === 0}
-              aria-label={t('tikabot.clear')}
-              title={t('tikabot.clear')}
-            >
-              <Eraser className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-
-          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-            <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.disclaimer')}</span>{' '}
-            <a className="link" href="tel:16263">
-              16263
-            </a>
-          </p>
-        </form>
       </div>
 
-      {/* --- How it works / honesty panel ---------------------------------- */}
+      {/* Honesty + Hotline Footer */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 no-print">
         <div className="card-padded">
           <h2

@@ -21,4 +21,7 @@ export const bn: TranslationDictionary = {
   'nav.auth': 'অ্যাকাউন্ট',
   'nav.about': 'পরিচিতি',
   'nav.privacy': 'গোপনীয়তা ও তথ্য',
+  'nav.coldChain': '৩ডি কোল্ড-চেইন ল্যাব',
+  'nav.readiness': 'প্রস্তুতি পরামর্শক',
+  'nav.quickSearch': 'দ্রুত খুঁজুন',
 };

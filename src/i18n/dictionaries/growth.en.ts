@@ -11,6 +11,7 @@ export const en: TranslationDictionary = {
     'Track height and weight against WHO 0–5 year curves alongside recorded vaccinations.',
   'growth.metric.weight': 'Weight (kg)',
   'growth.metric.height': 'Height / Length (cm)',
+  'growth.metric.both': 'Combined Trend',
   'growth.window.auto': 'Auto',
   'growth.window.12m': '0–12 mo',
   'growth.window.24m': '0–24 mo',
@@ -26,7 +27,10 @@ export const en: TranslationDictionary = {
   'growth.log.notes': 'Notes (optional)',
   'growth.log.notesPlaceholder': 'e.g. 14-week EPI clinic visit',
   'growth.log.save': 'Save measurement',
+  'growth.log.edit': 'Edit measurement',
+  'growth.log.editSave': 'Update measurement',
   'growth.log.saved': 'Growth measurement saved for {0}',
+  'growth.log.updated': 'Growth measurement updated',
   'growth.log.removed': 'Growth measurement removed',
   'growth.error.missing-date': 'Please enter a measurement date.',
   'growth.error.invalid-date': 'Please enter a valid date.',
@@ -38,6 +42,8 @@ export const en: TranslationDictionary = {
   'growth.empty.title': 'No height or weight measurements yet',
   'growth.empty.body':
     'WHO percentile bands for {0} are plotted above. Log measurements at each checkup or EPI visit to compare growth alongside vaccines.',
+  'growth.combined.empty':
+    'Log at least one weight or height measurement to compare both trajectories on the combined trend chart.',
   'growth.legend.child': 'Recorded measurement',
   'growth.legend.p50': 'WHO 50th (median)',
   'growth.legend.core': 'WHO 15th–85th',
@@ -53,6 +59,9 @@ export const en: TranslationDictionary = {
   'growth.band.above-p97': 'Above 97th percentile',
   'growth.summary.latestWeight': 'Latest weight',
   'growth.summary.latestHeight': 'Latest height',
+  'growth.summary.changeSincePrev': '{0} since previous checkup',
+  'growth.summary.checkups': '{0} checkups logged',
+  'growth.summary.bmi': 'Latest BMI: {0}',
   'growth.summary.whoMedian': 'WHO median at this age: {0}',
   'growth.summary.percentileEst': '~{0}th percentile',
   'growth.summary.beyondWho':
@@ -73,4 +82,16 @@ export const en: TranslationDictionary = {
   'growth.tooltip.vaccinesGiven': 'Vaccines at this age',
   'growth.disclaimer':
     'WHO Child Growth Standards (0–60 months: 0–24m recumbent length, 24m+ standing height). Percentile bands are informational only — consult a pediatrician or EPI health worker (16263) for growth concerns.',
+  'growth.quickCard.title': 'Child Growth Tracker',
+  'growth.quickCard.open': 'Open Growth Tracker',
+  'growth.quickCard.empty':
+    'No height or weight data logged yet — record checkups to view the trend chart.',
+  'growth.bmi5to19.notice':
+    'Age 5–19 years (61–228 months): WHO 2007 BMI-for-age guidance applies alongside saved weight/height logs.',
+  'growth.bmi5to19.label': 'WHO 2007 BMI-for-age (5–19y)',
+  'growth.bmi5to19.band.thinness': 'Thinness (< −2 SD)',
+  'growth.bmi5to19.band.normal': 'Healthy weight (−2 SD to +1 SD)',
+  'growth.bmi5to19.band.overweight': 'Overweight (+1 SD to +2 SD)',
+  'growth.bmi5to19.band.obesity': 'Obesity (≥ +2 SD)',
+  'growth.bmi5to19.median': 'WHO median BMI: {0}',
 };

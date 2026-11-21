@@ -1,28 +1,26 @@
 # Deployment
 
-TikaTrack is a **static** single-page app. Deploying it means building `dist/`
-and serving it from any static host. There is no application server; the only
-optional backend is Supabase (auth + sync), which is a hosted service you
-configure with environment variables.
+TikaTrack can run either as a full-stack Node 22+ Express + React application
+(`server.ts` serving API routes + `dist/`) or as an offline-first static SPA
+build (`dist/`). Cloud sync (Firebase Firestore, Cloud SQL PostgreSQL, or
+optional Supabase), Gemini AI (`/api/tikabot/*` & `/ws/live-voice`), and Web
+Push reminders (`/api/push/*`) activate automatically when configured.
 
-## 1. Build
+## 1. Build & Run
 
 ```bash
 npm ci                 # reproducible install from package-lock.json
-npm run build          # tsc -b && vite build  →  dist/
+npm run build          # vite build  →  dist/
+npm start              # node server.ts (Node 22+ Express + dist/)
 ```
 
-`dist/` is the entire deployable artefact. Serve it over HTTPS from any static
-host or CDN. To sanity-check the production build locally:
-
-```bash
-npm run preview        # http://localhost:4173
-```
+`dist/` is the compiled client bundle, and `server.ts` serves both `/api/*`
+endpoints and the static SPA shell on port `3000`.
 
 > [!NOTE]
-> The build has **no required environment variables**. If you omit the Supabase
-> variables the app runs in local-only mode — this is the default and is fully
-> functional.
+> The client build works with **zero required environment variables** in
+> local-only mode. Server-only secrets (`GEMINI_API_KEY`, `SQL_*`, `VAPID_*`)
+> must never be prefixed with `VITE_`.
 
 ## 2. SPA routing
 
@@ -191,12 +189,16 @@ backend and are **never** referenced by this client bundle.
 
 ## 5. Environment reference
 
-| Variable                 | Required | Default     | Purpose                                       |
-| ------------------------ | :------: | ----------- | --------------------------------------------- |
-| `VITE_SUPABASE_URL`      |    no    | _(empty)_   | Enables cloud auth/sync when set with the key |
-| `VITE_SUPABASE_ANON_KEY` |    no    | _(empty)_   | Supabase anon (public) key                    |
-| `VITE_APP_NAME`          |    no    | `TikaTrack` | Display name                                  |
-| `VITE_BASE`              |    no    | `/`         | Base path for sub-directory deploys           |
+| Variable                   | Required | Default     | Purpose                                                      |
+| -------------------------- | :------: | ----------- | ------------------------------------------------------------ |
+| `GEMINI_API_KEY`           |    no    | _(empty)_   | Server-side Gemini API key for `/api/tikabot/*` & Live voice |
+| `SQL_HOST` / `SQL_USER` / `SQL_PASSWORD` / `SQL_DATABASE` | no | _(empty)_ | Cloud SQL PostgreSQL connection for `/api/family/*` & push store |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | no | auto-generated | Persistent Web Push VAPID keys for 48-hour alerts          |
+| `VITE_GOOGLE_MAPS_API_KEY` |    no    | _(empty)_   | Google Maps JavaScript & Places key for vaccination centres  |
+| `VITE_GOOGLE_MAPS_MAP_ID`  |    no    | `DEMO_MAP_ID` | Optional custom Google Maps Map ID for AdvancedMarker styles |
+| `VITE_SUPABASE_URL`        |    no    | _(empty)_   | Optional Supabase project URL                                |
+| `VITE_SUPABASE_ANON_KEY`   |    no    | _(empty)_   | Optional Supabase anon (public) key                          |
+| `VITE_BASE`                |    no    | `/`         | Base path for sub-directory deploys                          |
 
 ## 6. Troubleshooting the build
 

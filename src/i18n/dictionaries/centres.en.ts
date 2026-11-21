@@ -78,4 +78,7 @@ export const en: TranslationDictionary = {
   'centres.map.unavailable': 'Interactive map is unavailable without a configured Google Maps key or network connection — centre directory and external Google Maps links remain ready below.',
   'centres.map.noCoords': '{0} has no pin coordinates yet — use Open in Maps to look up its address.',
   'centres.map.userLocation': 'Your starting location',
+  'centres.showingOf': 'Showing {0} of {1} centres',
+  'centres.loadMore': 'Show {0} more centres',
+  'centres.showAll': 'Show all ({0})',
 };

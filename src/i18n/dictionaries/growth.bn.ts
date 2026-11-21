@@ -11,6 +11,7 @@ export const bn: TranslationDictionary = {
     'টিকার রেকর্ডের পাশাপাশি WHO-এর ০–৫ বছর বয়সের মানদণ্ডের বিপরীতে উচ্চতা ও ওজন অনুসরণ করুন।',
   'growth.metric.weight': 'ওজন (কেজি)',
   'growth.metric.height': 'উচ্চতা / দৈর্ঘ্য (সেমি)',
+  'growth.metric.both': 'সম্মিলিত প্রবণতা',
   'growth.window.auto': 'স্বয়ংক্রিয়',
   'growth.window.12m': '০–১২ মাস',
   'growth.window.24m': '০–২৪ মাস',
@@ -26,7 +27,10 @@ export const bn: TranslationDictionary = {
   'growth.log.notes': 'নোট (ঐচ্ছিক)',
   'growth.log.notesPlaceholder': 'যেমন: ১৪ সপ্তাহের ইপিআই ক্লিনিক ভিজিট',
   'growth.log.save': 'পরিমাপ সংরক্ষণ করুন',
+  'growth.log.edit': 'পরিমাপ সম্পাদনা',
+  'growth.log.editSave': 'পরিমাপ হালনাগাদ করুন',
   'growth.log.saved': '{0}-এর বৃদ্ধির পরিমাপ সংরক্ষিত হয়েছে',
+  'growth.log.updated': 'বৃদ্ধির পরিমাপ হালনাগাদ হয়েছে',
   'growth.log.removed': 'বৃদ্ধির পরিমাপ মুছে ফেলা হয়েছে',
   'growth.error.missing-date': 'অনুগ্রহ করে পরিমাপের তারিখ লিখুন।',
   'growth.error.invalid-date': 'অনুগ্রহ করে সঠিক তারিখ লিখুন।',
@@ -38,6 +42,8 @@ export const bn: TranslationDictionary = {
   'growth.empty.title': 'এখনো কোনো উচ্চতা বা ওজনের পরিমাপ নেই',
   'growth.empty.body':
     '{0}-এর জন্য WHO পার্সেন্টাইল ব্যান্ড উপরে দেখানো হয়েছে। টিকার পাশাপাশি বৃদ্ধি তুলনা করতে প্রতিটি চেকআপ বা ইপিআই ভিজিটে পরিমাপ যুক্ত করুন।',
+  'growth.combined.empty':
+    'সম্মিলিত প্রবণতা চার্ট দেখতে কমপক্ষে একটি ওজন বা উচ্চতার পরিমাপ যুক্ত করুন।',
   'growth.legend.child': 'রেকর্ডকৃত পরিমাপ',
   'growth.legend.p50': 'WHO ৫০তম (মধ্যক)',
   'growth.legend.core': 'WHO ১৫তম–৮৫তম',
@@ -53,6 +59,9 @@ export const bn: TranslationDictionary = {
   'growth.band.above-p97': '৯৭তম পার্সেন্টাইলের উপরে',
   'growth.summary.latestWeight': 'সর্বশেষ ওজন',
   'growth.summary.latestHeight': 'সর্বশেষ উচ্চতা',
+  'growth.summary.changeSincePrev': 'আগের চেকআপের পর {0}',
+  'growth.summary.checkups': '{0}টি চেকআপ সংরক্ষিত',
+  'growth.summary.bmi': 'সর্বশেষ BMI: {0}',
   'growth.summary.whoMedian': 'এই বয়সে WHO মধ্যক: {0}',
   'growth.summary.percentileEst': 'প্রায় {0}তম পার্সেন্টাইল',
   'growth.summary.beyondWho':
@@ -73,4 +82,16 @@ export const bn: TranslationDictionary = {
   'growth.tooltip.vaccinesGiven': 'এই বয়সের টিকা',
   'growth.disclaimer':
     'WHO শিশু বৃদ্ধি মানদণ্ড (০–৬০ মাস: ০–২৪ মাসে শোয়া দৈর্ঘ্য, ২৪+ মাসে দাঁড়ানো উচ্চতা)। পার্সেন্টাইল ব্যান্ড শুধুমাত্র তথ্যগত — স্বাস্থ্য উদ্বেগের জন্য শিশু বিশেষজ্ঞ বা স্বাস্থ্যকর্মীর (১৬২৬৩) পরামর্শ নিন।',
+  'growth.quickCard.title': 'শিশুর বৃদ্ধি ট্র্যাকার',
+  'growth.quickCard.open': 'বৃদ্ধি চার্ট খুলুন',
+  'growth.quickCard.empty':
+    'এখনো ওজন বা উচ্চতার তথ্য নেই — প্রবণতা চার্ট দেখতে চেকআপ যুক্ত করুন।',
+  'growth.bmi5to19.notice':
+    'বয়স ৫–১৯ বছর (৬১–২২৮ মাস): সংরক্ষিত ওজন ও উচ্চতার পাশাপাশি WHO ২০০৭ BMI-ফর-এজ নির্দেশনা প্রযোজ্য।',
+  'growth.bmi5to19.label': 'WHO ২০০৭ BMI-ফর-এজ (৫–১৯ বছর)',
+  'growth.bmi5to19.band.thinness': 'কম ওজন (< −২ SD)',
+  'growth.bmi5to19.band.normal': 'স্বাভাবিক পরিসর (−২ SD থেকে +১ SD)',
+  'growth.bmi5to19.band.overweight': 'অতিরিক্ত ওজন (+১ SD থেকে +২ SD)',
+  'growth.bmi5to19.band.obesity': 'স্থূলতা (≥ +২ SD)',
+  'growth.bmi5to19.median': 'WHO মধ্যক BMI: {0}',
 };

@@ -6,8 +6,13 @@ import { allVaccines } from '../data/vaccines';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
-import { milestoneDoses, MILESTONE_DOSES, type MilestoneDose } from '../lib/doseLedger';
-import { formatDate, todayISO } from '../lib/format';
+import {
+  checkDuplicateDose,
+  milestoneDoses,
+  MILESTONE_DOSES,
+  type MilestoneDose,
+} from '../lib/doseLedger';
+import { formatDate, isValidISODate, todayISO } from '../lib/format';
 import type { Profile, VaccinationEvent } from '../types';
 
 /**
@@ -108,6 +113,33 @@ export function DoseRecorder({
     (choice) => String(choice.milestone.doseNumber) === doseNumber && choice.given,
   );
 
+  const numericDoseNumber = doseNumber === '' ? null : Number(doseNumber);
+  const duplicateCheck = useMemo(() => {
+    if (!vaccineId || !date) return null;
+    return checkDuplicateDose(events, {
+      vaccineId,
+      date,
+      doseNumber: numericDoseNumber,
+    });
+  }, [events, vaccineId, date, numericDoseNumber]);
+
+  const beforeDobWarning = Boolean(
+    isValidISODate(date) && isValidISODate(profile.dateOfBirth) && date < profile.dateOfBirth,
+  );
+
+  const chronologyWarning = useMemo(() => {
+    if (!vaccineId || !isValidISODate(date) || !numericDoseNumber) return null;
+    const sameVaccine = events.filter((ev) => ev.vaccineId === vaccineId && ev.doseNumber !== null);
+    const earlierDoseLaterDate = sameVaccine.find(
+      (ev) =>
+        (ev.doseNumber as number) < numericDoseNumber &&
+        isValidISODate(ev.date) &&
+        date < ev.date,
+    );
+    if (earlierDoseLaterDate) return earlierDoseLaterDate;
+    return null;
+  }, [events, vaccineId, date, numericDoseNumber]);
+
   /** Centres this family has already used, then a bounded slice of the dataset. */
   const centreSuggestions = useMemo(() => {
     const used = events
@@ -133,6 +165,11 @@ export function DoseRecorder({
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    if (!isValidISODate(date)) {
+      setError(t('tracker.dose.error.invalid-date'));
+      return;
+    }
 
     const result = recordDoseEvent(profile.id, {
       vaccineId,
@@ -375,6 +412,45 @@ export function DoseRecorder({
             'tracker.dose.alreadyGiven',
             alreadyGiven.milestone.label[language],
             formatDate(alreadyGiven.given.date, language),
+          )}
+        </p>
+      )}
+
+      {!alreadyGiven?.given && duplicateCheck?.hasExactSameVisitDuplicate && (
+        <p
+          className={`flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          {t(
+            'tracker.dose.warn.exactDuplicate',
+            selected?.name ?? vaccineId,
+            formatDate(date, language),
+          )}
+        </p>
+      )}
+
+      {beforeDobWarning && (
+        <p
+          className={`flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          {t(
+            'tracker.dose.warn.beforeDob',
+            formatDate(date, language),
+            formatDate(profile.dateOfBirth, language),
+          )}
+        </p>
+      )}
+
+      {chronologyWarning && (
+        <p
+          className={`flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          {t(
+            'tracker.dose.warn.chronology',
+            formatDate(date, language),
+            formatDate(chronologyWarning.date, language),
           )}
         </p>
       )}

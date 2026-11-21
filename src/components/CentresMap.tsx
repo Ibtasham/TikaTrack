@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AdvancedMarker,
   APILoadingStatus,
@@ -835,7 +835,7 @@ function InnerCentresMap({
           aria-label={t('centres.map.heading')}
         >
           <GoogleMapView
-            mapId="DEMO_MAP_ID"
+            mapId={import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID'}
             defaultCenter={BANGLADESH_DEFAULT_CENTER}
             defaultZoom={7}
             gestureHandling="greedy"
@@ -1047,7 +1047,7 @@ function InnerCentresMap({
   );
 }
 
-export function CentresMap(props: CentresMapProps) {
+export const CentresMap = memo(function CentresMap(props: CentresMapProps) {
   const { t, language } = useI18n();
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -1070,4 +1070,4 @@ export function CentresMap(props: CentresMapProps) {
       <InnerCentresMap {...props} onStatusError={() => setLoadFailed(true)} />
     </APIProvider>
   );
-}
+});

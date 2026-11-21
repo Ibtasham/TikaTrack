@@ -63,4 +63,16 @@ export const en: TranslationDictionary = {
   'auth.hidePassword': 'Hide password',
   'auth.showPassword': 'Show password',
   'auth.passwordChanged': 'Password updated',
+  'auth.google.title': 'Sync across devices with Google',
+  'auth.google.subtitle':
+    'Back up family vaccination records and growth logs to encrypted Firebase + Cloud SQL storage, while still working offline.',
+  'auth.google.button': 'Continue with Google',
+  'auth.google.success': 'Signed in with Google — cloud sync active',
+  'auth.google.syncNow': 'Sync now',
+  'auth.google.syncedAt': 'Synced {0}',
+  'auth.google.vaultTitle': 'Synced family health vault',
+  'auth.google.vaultBody':
+    'Your child profiles, dose events, and WHO growth logs sync automatically between this browser, Cloud Firestore, and Cloud SQL.',
+  'auth.orOfflineAccount': 'or use an offline browser account',
+  'auth.profilesCount': '{0} family profiles',
 };

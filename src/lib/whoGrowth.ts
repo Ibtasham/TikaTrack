@@ -1,10 +1,12 @@
 import {
+  WHO_5_TO_19_MAX_MONTHS,
+  WHO_BMI_5_TO_19_AGE,
   WHO_HEIGHT_FOR_AGE,
   WHO_MAX_MONTHS,
   WHO_WEIGHT_FOR_AGE,
   type GrowthMetric,
+  type WhoBmiReferencePoint,
   type WhoReferencePoint,
-  type WhoSex,
 } from '../data/whoGrowthStandards';
 import { allVaccines } from '../data/vaccines';
 import { daysBetween, parseISODate, todayISO } from './format';
@@ -204,6 +206,86 @@ export function assessMeasurement(
   };
 }
 
+export type AdolescentBmiBand = 'thinness' | 'normal' | 'overweight' | 'obesity';
+
+export interface AdolescentBmiAssessment {
+  bmi: number;
+  band: AdolescentBmiBand;
+  medianBmi: number;
+  thinnessCutoff: number;
+  overweightCutoff: number;
+  obesityCutoff: number;
+}
+
+/** Piecewise linear interpolation for WHO 2007 5–19 years (61–228 months) BMI-for-age. */
+export function interpolateWhoBmi5to19(
+  gender: Profile['gender'] | undefined,
+  month: number,
+): WhoBmiReferencePoint | null {
+  if (!Number.isFinite(month) || month <= WHO_MAX_MONTHS || month > WHO_5_TO_19_MAX_MONTHS) {
+    return null;
+  }
+  const curve: readonly WhoBmiReferencePoint[] =
+    gender === 'female' || gender === 'male'
+      ? WHO_BMI_5_TO_19_AGE[gender]
+      : WHO_BMI_5_TO_19_AGE.female.map((f, idx) => {
+          const m = WHO_BMI_5_TO_19_AGE.male[idx];
+          return {
+            month: f.month,
+            thinness: round1((f.thinness + m.thinness) / 2),
+            median: round1((f.median + m.median) / 2),
+            overweight: round1((f.overweight + m.overweight) / 2),
+            obesity: round1((f.obesity + m.obesity) / 2),
+          };
+        });
+
+  if (month <= curve[0].month) return curve[0];
+  const last = curve[curve.length - 1];
+  if (month >= last.month) return last;
+
+  for (let i = 0; i < curve.length - 1; i += 1) {
+    const a = curve[i];
+    const b = curve[i + 1];
+    if (month >= a.month && month <= b.month) {
+      const ratio = (month - a.month) / (b.month - a.month || 1);
+      return {
+        month: round1(month),
+        thinness: round1(a.thinness + (b.thinness - a.thinness) * ratio),
+        median: round1(a.median + (b.median - a.median) * ratio),
+        overweight: round1(a.overweight + (b.overweight - a.overweight) * ratio),
+        obesity: round1(a.obesity + (b.obesity - a.obesity) * ratio),
+      };
+    }
+  }
+  return last;
+}
+
+/** Assess BMI-for-age under WHO Reference 2007 for children & teens aged 5–19 years (61–228 months). */
+export function assessBmiForAge5to19(
+  gender: Profile['gender'] | undefined,
+  month: number,
+  weightKg: number,
+  heightCm: number,
+): AdolescentBmiAssessment | null {
+  if (!Number.isFinite(weightKg) || !Number.isFinite(heightCm) || heightCm <= 0) return null;
+  const ref = interpolateWhoBmi5to19(gender, month);
+  if (!ref) return null;
+  const bmi = round1(weightKg / ((heightCm / 100) * (heightCm / 100)));
+  let band: AdolescentBmiBand = 'normal';
+  if (bmi < ref.thinness) band = 'thinness';
+  else if (bmi >= ref.obesity) band = 'obesity';
+  else if (bmi >= ref.overweight) band = 'overweight';
+
+  return {
+    bmi,
+    band,
+    medianBmi: ref.median,
+    thinnessCutoff: ref.thinness,
+    overweightCutoff: ref.overweight,
+    obesityCutoff: ref.obesity,
+  };
+}
+
 /** Build display labels for an administered vaccine event. */
 export function resolveVaccineLabel(event: VaccinationEvent): { en: string; bn: string } {
   if (event.doseNumber !== null) {
@@ -363,6 +445,112 @@ export function buildGrowthChartSeries(
   }
 
   return [...byMonth.values()].sort((a, b) => a.month - b.month);
+}
+
+export interface CombinedGrowthPoint {
+  /** Age in months (numeric x-axis key for Recharts). */
+  month: number;
+  date: string;
+  weightKg?: number;
+  heightCm?: number;
+  whoWeightP50?: number;
+  whoHeightP50?: number;
+  notes?: string;
+  vaccines?: GrowthVaccineMarker[];
+}
+
+export interface GrowthProgressSummary {
+  checkupCount: number;
+  latestWeightKg?: number;
+  latestWeightDate?: string;
+  weightDeltaKg?: number;
+  latestHeightCm?: number;
+  latestHeightDate?: string;
+  heightDeltaCm?: number;
+  bmi?: number;
+}
+
+/**
+ * Build chronological trend points containing both weight and height
+ * measurements plus WHO 50th-percentile baselines for dual-axis Recharts
+ * visualization.
+ */
+export function buildCombinedGrowthSeries(
+  profile: Profile,
+  maxMonths = WHO_MAX_MONTHS,
+  includeVaccines = true,
+): CombinedGrowthPoint[] {
+  const sorted = sortGrowthMeasurements(profile.growth ?? []);
+  const points: CombinedGrowthPoint[] = [];
+
+  for (const entry of sorted) {
+    const m = ageInMonths(profile.dateOfBirth, entry.date);
+    if (m === null || m < 0 || m > maxMonths) continue;
+    const roundedMonth = Math.round(m * 10) / 10;
+    const wRef = interpolateWhoBand(profile.gender, 'weight', roundedMonth);
+    const hRef = interpolateWhoBand(profile.gender, 'height', roundedMonth);
+    const vaccines = includeVaccines ? nearbyVaccinesForDate(profile, entry.date, 7) : undefined;
+
+    points.push({
+      month: roundedMonth,
+      date: entry.date,
+      weightKg: entry.weightKg,
+      heightCm: entry.heightCm,
+      whoWeightP50: wRef?.p50,
+      whoHeightP50: hRef?.p50,
+      notes: entry.notes,
+      ...(vaccines && vaccines.length > 0 ? { vaccines } : {}),
+    });
+  }
+
+  return points;
+}
+
+/**
+ * Compute latest weight/height values, change since previous measurement,
+ * and BMI when both metrics exist on the latest paired measurement.
+ */
+export function computeGrowthProgress(
+  measurements: readonly GrowthMeasurement[],
+): GrowthProgressSummary {
+  const sorted = sortGrowthMeasurements(measurements);
+  const weightEntries = sorted.filter(
+    (item): item is GrowthMeasurement & { weightKg: number } => typeof item.weightKg === 'number',
+  );
+  const heightEntries = sorted.filter(
+    (item): item is GrowthMeasurement & { heightCm: number } => typeof item.heightCm === 'number',
+  );
+
+  const latestWeight = weightEntries[weightEntries.length - 1];
+  const prevWeight = weightEntries.length >= 2 ? weightEntries[weightEntries.length - 2] : undefined;
+  const latestHeight = heightEntries[heightEntries.length - 1];
+  const prevHeight = heightEntries.length >= 2 ? heightEntries[heightEntries.length - 2] : undefined;
+
+  const paired = [...sorted]
+    .reverse()
+    .find((item) => typeof item.weightKg === 'number' && typeof item.heightCm === 'number');
+  const bmi =
+    paired && paired.weightKg && paired.heightCm
+      ? Math.round((paired.weightKg / ((paired.heightCm / 100) * (paired.heightCm / 100))) * 10) /
+        10
+      : undefined;
+
+  return {
+    checkupCount: sorted.length,
+    latestWeightKg: latestWeight?.weightKg,
+    latestWeightDate: latestWeight?.date,
+    weightDeltaKg:
+      latestWeight && prevWeight
+        ? Math.round((latestWeight.weightKg - prevWeight.weightKg) * 100) / 100
+        : undefined,
+    latestHeightCm: latestHeight?.heightCm,
+    latestHeightDate: latestHeight?.date,
+    heightDeltaCm:
+      latestHeight && prevHeight
+        ? Math.round((latestHeight.heightCm - prevHeight.heightCm) * 10) / 10
+        : undefined,
+    bmi,
+  };
 }
 
 /** Validate and build one GrowthMeasurement record. */

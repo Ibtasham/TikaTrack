@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 
+import { useOptionalAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
@@ -30,25 +31,37 @@ import {
   todayISO,
 } from '../lib/format';
 import { downloadICS, eventUid, type CalendarEvent } from '../lib/ics';
-import { reminderAlarmOffsets } from '../lib/intelligentReminders';
-import { appUrl } from '../lib/share';
 import {
+  buildUpcomingPushDoses,
   DEFAULT_REMINDER_PREFERENCES,
+  findUpcoming48HourDoses,
   generateReminders,
   getReminderStatistics,
   loadReminderPreferences,
   loadReminders,
   markReminderAsAcknowledged,
   processDueReminders,
+  REMINDER_LEAD_DAYS_OPTIONS,
+  reminderAlarmOffsets,
   saveReminderPreferences,
   saveReminders,
   sendBrowserNotification,
   type Reminder,
   type ReminderPreferences,
 } from '../lib/intelligentReminders';
+import {
+  getWebPushStatus,
+  isWebPushSupported,
+  sendTestWebPush,
+  subscribeToWebPush,
+  syncWebPushSchedule,
+  unsubscribeFromWebPush,
+  type WebPushStatus,
+} from '../lib/pushClient';
+import { appUrl } from '../lib/share';
 
 /** Lead times the user can toggle, in days before the due date. */
-const DAY_OPTIONS = [14, 7, 3, 1];
+const DAY_OPTIONS = [...REMINDER_LEAD_DAYS_OPTIONS];
 
 type Group = 'overdue' | 'dueToday' | 'upcoming' | 'done';
 
@@ -62,6 +75,8 @@ type Group = 'overdue' | 'dueToday' | 'upcoming' | 'done';
  */
 export default function RemindersPage() {
   const { t, language } = useI18n();
+  const auth = useOptionalAuth();
+  const firebaseUser = auth?.firebaseUser ?? null;
   const { profiles } = useProfiles();
   const toast = useToast();
   const isBangla = language === 'bn';
@@ -76,6 +91,29 @@ export default function RemindersPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     typeof Notification === 'undefined' ? 'denied' : Notification.permission,
   );
+  const [pushStatus, setPushStatus] = useState<WebPushStatus>({
+    supported: isWebPushSupported(),
+    permission: typeof Notification === 'undefined' ? 'denied' : Notification.permission,
+    subscribed: false,
+    endpoint: null,
+  });
+  const [pushBusy, setPushBusy] = useState(false);
+
+  const upcomingPushDoses = useMemo(() => buildUpcomingPushDoses(profiles), [profiles]);
+  const dueWithin48Hours = useMemo(() => findUpcoming48HourDoses(profiles), [profiles]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getWebPushStatus().then((status) => {
+      if (!cancelled) {
+        setPushStatus(status);
+        setNotificationPermission(status.permission);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const vaccineName = useMemo(
     () => new Map(allVaccines.map((vaccine) => [vaccine.id, vaccine.name])),
@@ -175,6 +213,14 @@ export default function RemindersPage() {
     saveReminderPreferences(next);
     setPreferences(next);
     const count = rebuild(next).length;
+    if (pushStatus.subscribed) {
+      void syncWebPushSchedule({
+        profiles,
+        preferences: next,
+        language,
+        firebaseUser,
+      });
+    }
     toast.success(t('reminders.settings.saved'), t('reminders.refreshed', count));
   };
 
@@ -188,8 +234,88 @@ export default function RemindersPage() {
     if (result === 'granted') {
       toast.success(t('reminders.permission.granted'));
       setDraft((previous) => ({ ...previous, browserNotifications: true }));
+      if (isWebPushSupported()) {
+        await handleEnableWebPush();
+      }
     } else {
       toast.warning(t('reminders.permission.denied'));
+    }
+  };
+
+  const handleEnableWebPush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await subscribeToWebPush({
+        profiles,
+        preferences,
+        language,
+        firebaseUser,
+      });
+      setNotificationPermission(result.permission);
+      if (result.ok) {
+        const nextStatus = await getWebPushStatus();
+        setPushStatus(nextStatus);
+        const nextPrefs = { ...preferences, browserNotifications: true };
+        saveReminderPreferences(nextPrefs);
+        setPreferences(nextPrefs);
+        setDraft(nextPrefs);
+        toast.success(
+          t('reminders.push.subscribedToast'),
+          t('reminders.push.queued', result.queuedDoses),
+        );
+      } else if (result.permission === 'denied') {
+        toast.warning(t('reminders.permission.denied'));
+      } else {
+        toast.error(t('reminders.push.error'), result.error);
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleSyncWebPush = async () => {
+    setPushBusy(true);
+    try {
+      const res = await syncWebPushSchedule({
+        profiles,
+        preferences,
+        language,
+        firebaseUser,
+      });
+      if (res.synced) {
+        toast.success(t('reminders.push.syncedToast'), t('reminders.push.queued', res.queuedDoses));
+      } else {
+        toast.error(t('reminders.push.error'));
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleDisableWebPush = async () => {
+    setPushBusy(true);
+    try {
+      await unsubscribeFromWebPush();
+      const nextStatus = await getWebPushStatus();
+      setPushStatus(nextStatus);
+      toast.info(t('reminders.push.disabledToast'));
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleTestWebPush = async () => {
+    setPushBusy(true);
+    try {
+      const sample = dueWithin48Hours[0] ?? upcomingPushDoses[0];
+      const res = await sendTestWebPush(language, sample);
+      if (res.ok) {
+        toast.success(t('reminders.push.testSent'), t('reminders.push.testBody'));
+      } else {
+        toast.error(t('reminders.push.error'), res.error);
+      }
+    } finally {
+      setPushBusy(false);
     }
   };
 
@@ -533,8 +659,95 @@ export default function RemindersPage() {
 
         {/* --- Sidebar ----------------------------------------------------- */}
         <div className="no-print">
-          {/* Notifications */}
+          {/* 48-Hour Web Push Notifications */}
           <section className="card-padded">
+            <h2
+              className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+            >
+              <BellRing className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              {t('reminders.push.title')}
+            </h2>
+            <p
+              className={`mt-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              {t('reminders.push.body')}
+            </p>
+
+            {!pushStatus.supported ? (
+              <p
+                className={`mt-3 rounded-lg bg-neutral-100 p-3 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {t('reminders.push.unsupported')}
+              </p>
+            ) : pushStatus.subscribed ? (
+              <div className="mt-3 space-y-2">
+                <p
+                  className={`flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {t('reminders.push.active')}
+                </p>
+                <p className={`text-xs text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                  {t('reminders.push.queued', localiseNumber(upcomingPushDoses.length, language))}
+                </p>
+                {dueWithin48Hours.length > 0 && (
+                  <p className={`text-xs font-semibold text-amber-700 dark:text-amber-300 ${isBangla ? 'font-bangla' : ''}`}>
+                    {t('reminders.push.within48h', localiseNumber(dueWithin48Hours.length, language))}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm whitespace-nowrap shrink-0"
+                    disabled={pushBusy}
+                    onClick={() => void handleTestWebPush()}
+                  >
+                    <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t('reminders.push.test')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                    disabled={pushBusy}
+                    onClick={() => void handleSyncWebPush()}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t('reminders.push.sync')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                    disabled={pushBusy}
+                    onClick={() => void handleDisableWebPush()}
+                  >
+                    {t('reminders.push.disable')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {notificationPermission === 'denied' && (
+                  <p
+                    className={`rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t('reminders.permission.denied')}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn-primary whitespace-nowrap shrink-0"
+                  disabled={pushBusy}
+                  onClick={() => void handleEnableWebPush()}
+                >
+                  <BellRing className="h-4 w-4" aria-hidden="true" />
+                  {pushBusy ? t('reminders.push.enabling') : t('reminders.push.enable')}
+                </button>
+              </div>
+            )}
+          </section>
+
+          {/* Foreground Browser Notifications */}
+          <section className="card-padded mt-5">
             <h2
               className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
             >
@@ -563,7 +776,7 @@ export default function RemindersPage() {
             ) : (
               <button
                 type="button"
-                className="btn-primary mt-3"
+                className="btn-secondary mt-3 whitespace-nowrap shrink-0"
                 onClick={() => void handleRequestPermission()}
               >
                 <BellRing className="h-4 w-4" aria-hidden="true" />
@@ -574,7 +787,7 @@ export default function RemindersPage() {
             {notificationPermission === 'granted' && (
               <button
                 type="button"
-                className="btn-ghost btn-sm mt-2"
+                className="btn-ghost btn-sm mt-2 whitespace-nowrap shrink-0"
                 onClick={() => void handleTestNotification()}
               >
                 {t('reminders.test.title')}
@@ -642,7 +855,11 @@ export default function RemindersPage() {
                           : 'chip bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
                       }
                     >
-                      {day === 1 ? t('common.units.day', 1) : t('common.units.days', day)}
+                      {day === 2
+                        ? t('reminders.lead.hours48')
+                        : day === 1
+                          ? t('common.units.day', 1)
+                          : t('common.units.days', day)}
                     </button>
                   );
                 })}

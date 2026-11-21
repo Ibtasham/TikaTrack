@@ -19,11 +19,12 @@
  *   - an urgency rule that surfaces emergency advice above everything else.
  */
 
-import type { Language } from '../i18n/types';
-import { faqDatabase, type FAQEntry } from '../data/tikabot';
-import { allVaccines, type Vaccine } from '../data/vaccines';
-import { isPublishable, programmeFor } from '../data/evidence/bridge';
-import { isDocumentLevelSourceUrl } from '../data/evidence/sources';
+import type { Language } from '../i18n/types.ts';
+import { faqDatabase, type FAQEntry } from '../data/tikabot.ts';
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails.ts';
+import { allVaccines, type Vaccine } from '../data/vaccines.ts';
+import { isPublishable, programmeFor } from '../data/evidence/bridge.ts';
+import { isDocumentLevelSourceUrl } from '../data/evidence/sources.ts';
 
 export type DocumentKind = 'faq' | 'vaccine';
 
@@ -105,6 +106,7 @@ function vaccineToDocument(vaccine: Vaccine): KnowledgeDocument {
   const sources = [vaccine.source, vaccine.sourceUrl].filter(
     (value): value is string => typeof value === 'string' && isDocumentLevelSourceUrl(value),
   );
+  const clinical = getVaccineClinicalProfile(vaccine);
   return {
     id: `vaccine-${vaccine.id}`,
     kind: 'vaccine',
@@ -112,21 +114,30 @@ function vaccineToDocument(vaccine: Vaccine): KnowledgeDocument {
     body: {
       en: [
         `${vaccine.fullName.en} protects against ${vaccine.disease.en}.`,
-        `Schedule: ${vaccine.schedule.en}.`,
-        `Doses: ${vaccine.doses}. Age group: ${vaccine.ageGroup}. Efficacy: ${vaccine.efficacy}.`,
+        `Type: ${clinical.platform.en}. Route: ${clinical.route.en} (${clinical.doseVolume.en}).`,
+        `Schedule: ${vaccine.schedule.en}. Dosing & catch-up: ${clinical.dosingProtocol.en}`,
+        `Doses: ${vaccine.doses}. Age group: ${vaccine.ageGroup}. Efficacy: ${vaccine.efficacy}. ${clinical.immunityProfile.en}`,
+        `Cold chain: ${clinical.coldChain.en}`,
+        `Special populations: ${clinical.specialPopulations.en}`,
         `Common side effects: ${vaccine.commonEffects.en}`,
         `Serious side effects: ${vaccine.seriousEffects.en}`,
         `Who should not take it: ${vaccine.contraindications.en}`,
+        `Aftercare: ${clinical.aftercare.en}`,
         vaccine.description.en,
       ]
         .filter(Boolean)
         .join(' '),
       bn: [
         `${vaccine.fullName.bn} — ${vaccine.disease.bn} থেকে সুরক্ষা দেয়।`,
-        `সূচি: ${vaccine.schedule.bn}।`,
-        `ডোজ: ${vaccine.doses}। সাধারণ পার্শ্বপ্রতিক্রিয়া: ${vaccine.commonEffects.bn}`,
+        `ধরন: ${clinical.platform.bn}। প্রয়োগের পথ: ${clinical.route.bn} (${clinical.doseVolume.bn})।`,
+        `সূচি: ${vaccine.schedule.bn}। ডোজ ও ক্যাচ-আপ: ${clinical.dosingProtocol.bn}`,
+        `ডোজ: ${vaccine.doses}। সুরক্ষা ও স্থায়িত্ব: ${clinical.immunityProfile.bn}`,
+        `কোল্ড-চেইন: ${clinical.coldChain.bn}`,
+        `গর্ভাবস্থা ও বিশেষ গোষ্ঠী: ${clinical.specialPopulations.bn}`,
+        `সাধারণ পার্শ্বপ্রতিক্রিয়া: ${vaccine.commonEffects.bn}`,
         `গুরুতর পার্শ্বপ্রতিক্রিয়া: ${vaccine.seriousEffects.bn}`,
         `কাদের নেওয়া উচিত নয়: ${vaccine.contraindications.bn}`,
+        `পরবর্তী যত্ন: ${clinical.aftercare.bn}`,
         vaccine.description.bn,
       ]
         .filter(Boolean)
@@ -140,10 +151,20 @@ function vaccineToDocument(vaccine: Vaccine): KnowledgeDocument {
         programmeFor(vaccine.id),
         vaccine.ageGroup,
         vaccine.introduced,
+        clinical.platform.en,
+        clinical.route.en,
+        clinical.formulations,
       ]
         .filter(Boolean)
         .join(' '),
-      bn: [vaccine.id, vaccine.disease.bn, programmeFor(vaccine.id), vaccine.ageGroup]
+      bn: [
+        vaccine.id,
+        vaccine.disease.bn,
+        programmeFor(vaccine.id),
+        vaccine.ageGroup,
+        clinical.platform.bn,
+        clinical.route.bn,
+      ]
         .filter(Boolean)
         .join(' '),
     },

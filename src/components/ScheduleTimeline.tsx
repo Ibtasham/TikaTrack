@@ -1,41 +1,80 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Calendar,
-  Clock,
   AlertCircle,
+  Calendar,
   CheckCircle2,
-  TrendingUp,
-  Download,
-  Printer,
-  Filter,
   ClipboardPlus,
+  Clock,
+  Compass,
+  Download,
+  Filter,
+  Printer,
+  TrendingUp,
   Users,
 } from 'lucide-react';
-import { allVaccines, schedule, vaccineColors, type Vaccine } from '../data/vaccines';
-import { VaccineModal } from './VaccineModal';
+
+import {
+  LIFE_STAGE_OPTIONS,
+  lifespanSchedule,
+  lifeStageForAgeDays,
+  type LifeStageKey,
+  type LifespanMilestone,
+  type ProgrammeScope,
+} from '../data/lifespanSchedule';
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
+import { allVaccines, type Vaccine } from '../data/vaccines';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useI18n } from '../i18n';
-import { downloadTextFile, printElement } from '../lib/exporters';
-import { formatAge, formatDate, localiseNumber, todayISO } from '../lib/format';
 import { doseNumberForMilestone } from '../lib/doseLedger';
+import { downloadTextFile, printElement } from '../lib/exporters';
 import {
+  daysBetween,
+  formatAge,
+  formatDate,
+  isValidISODate,
+  localiseNumber,
+  parseISODate,
+  resolveReferenceToday,
+  resolveReferenceTodayISO,
+  todayISO,
+} from '../lib/format';
+import { buildLifespanDoseIndex, resolveLifespanVaccineRecord } from '../lib/lifespanStatus';
+import {
+  analyzeSchedule,
   calculateAge,
-  calculateVaccinationStats,
-  generatePersonalizedSchedule,
+  calculateScheduledDate,
   type ScheduledDose,
 } from '../lib/smartScheduler';
+import { VaccineModal } from './VaccineModal';
+
+type MilestoneStatus =
+  | 'completed'
+  | 'active-stage'
+  | 'overdue'
+  | 'due-today'
+  | 'upcoming'
+  | 'passed'
+  | 'special'
+  | 'not-due';
+
+const PROGRAMME_SCOPES: ProgrammeScope[] = ['all', 'epi', 'recommended', 'special'];
 
 export default function ScheduleTimeline() {
   const { profiles } = useProfiles();
+  const [searchParams] = useSearchParams();
   const [selectedMemberId, setSelectedMemberId] = useState<string>(profiles[0]?.id ?? '');
   const [birthDate, setBirthDate] = useState('');
   const [selectedVaccine, setSelectedVaccine] = useState<Vaccine | null>(null);
-  const [ageFilter, setAgeFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<LifeStageKey>('all');
+  const [programmeScope, setProgrammeScope] = useState<ProgrammeScope>('all');
+  const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const { t, language } = useI18n();
   const isBangla = language === 'bn';
+
+  const doseIndex = useMemo(() => buildLifespanDoseIndex(lifespanSchedule), []);
 
   useEffect(() => {
     if (selectedMemberId && !profiles.some((p) => p.id === selectedMemberId)) {
@@ -43,132 +82,237 @@ export default function ScheduleTimeline() {
     }
   }, [profiles, selectedMemberId]);
 
+  useEffect(() => {
+    const memberParam = searchParams.get('member');
+    if (memberParam && profiles.some((p) => p.id === memberParam)) {
+      setSelectedMemberId(memberParam);
+    }
+
+    const stageParam = searchParams.get('stage');
+    if (!stageParam) return;
+
+    const milestoneMatch = lifespanSchedule.find((m) => m.id === stageParam);
+    if (milestoneMatch) {
+      setStageFilter(milestoneMatch.stage);
+      setProgrammeScope('all');
+      setHighlightedMilestoneId(milestoneMatch.id);
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`milestone-card-${milestoneMatch.id}`);
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+      return;
+    }
+
+    const validStage = LIFE_STAGE_OPTIONS.find((opt) => opt.key === stageParam);
+    if (validStage) {
+      setStageFilter(validStage.key);
+      setHighlightedMilestoneId(null);
+    }
+  }, [profiles, searchParams]);
+
   const activeMember = useMemo(
     () => profiles.find((p) => p.id === selectedMemberId) ?? null,
     [profiles, selectedMemberId],
   );
 
-  const effectiveDob = activeMember ? activeMember.dateOfBirth : birthDate;
+  const rawEffectiveDob = activeMember ? activeMember.dateOfBirth : birthDate;
+  const referenceTodayISO = resolveReferenceTodayISO();
+  const isInvalidOrFutureDob = Boolean(
+    rawEffectiveDob && (!isValidISODate(rawEffectiveDob) || rawEffectiveDob > referenceTodayISO),
+  );
+  const effectiveDob = rawEffectiveDob && !isInvalidOrFutureDob ? rawEffectiveDob : '';
   const age = useMemo(() => (effectiveDob ? calculateAge(effectiveDob) : null), [effectiveDob]);
 
-  // Real dose-level schedule when a saved family member is selected.
-  const memberScheduleMap = useMemo(() => {
-    const map = new Map<string, ScheduledDose>();
-    if (!activeMember) return map;
-    for (const row of generatePersonalizedSchedule(activeMember.dateOfBirth, activeMember)) {
-      map.set(`${row.vaccineId}@${row.scheduledAge.days}`, row);
-    }
-    return map;
-  }, [activeMember]);
+  const currentStage = useMemo(
+    () => (age ? lifeStageForAgeDays(age.days) : null),
+    [age],
+  );
 
-  const memberStats = useMemo(
-    () =>
-      activeMember ? calculateVaccinationStats(activeMember.dateOfBirth, activeMember) : null,
+  const memberAnalysis = useMemo(
+    () => (activeMember ? analyzeSchedule(activeMember.dateOfBirth, activeMember) : null),
     [activeMember],
   );
 
-  // Anonymous age-milestone calculation when inspecting a custom DOB without a profile.
+  // Exact EPI dose-ledger schedule rows for active member
+  const memberScheduleMap = useMemo(() => {
+    const map = new Map<string, ScheduledDose>();
+    if (!memberAnalysis) return map;
+    for (const row of memberAnalysis.scheduled) {
+      map.set(`${row.vaccineId}@${row.scheduledAge.days}`, row);
+    }
+    return map;
+  }, [memberAnalysis]);
+
+  const memberStats = memberAnalysis?.stats ?? null;
+
+  // Life-stage milestone progress when an anonymous custom DOB is entered
   const anonymousProgress = useMemo(() => {
     if (!age) return { reached: 0, total: 0, percentage: 0 };
+    const ageMilestones = lifespanSchedule.filter((item) => item.ageDays !== null);
     let reached = 0;
-    let total = 0;
-    for (const item of schedule) {
-      for (const _v of item.vaccines) {
-        total += 1;
-        if (age.days >= item.ageDays) reached += 1;
+    for (const item of ageMilestones) {
+      if (item.ageDays === null) continue;
+      if (typeof item.ageMonths === 'number' && effectiveDob) {
+        const target = calculateScheduledDate(effectiveDob, item.ageDays, item.ageMonths);
+        if (target <= referenceTodayISO) reached += 1;
+      } else if (age.days >= item.ageDays) {
+        reached += 1;
       }
     }
+    const total = ageMilestones.length;
     return {
       reached,
       total,
       percentage: total > 0 ? Math.round((reached / total) * 100) : 0,
     };
-  }, [age]);
+  }, [age, effectiveDob, referenceTodayISO]);
 
-  const getMilestoneStatus = (ageDays: number, vaccinesAtAge: typeof schedule[number]['vaccines']) => {
+  const getMilestoneStatus = (item: LifespanMilestone): MilestoneStatus => {
+    if (item.ageDays === null) return 'special';
+
     if (activeMember) {
-      const rows = vaccinesAtAge
-        .map((v) => memberScheduleMap.get(`${v.id}@${ageDays}`))
+      const epiRows = item.vaccines
+        .map((v) => memberScheduleMap.get(`${v.id}@${item.ageDays}`))
         .filter((row): row is ScheduledDose => Boolean(row));
-      if (rows.length > 0) {
-        if (rows.every((r) => r.status === 'completed')) return 'completed';
-        if (rows.some((r) => r.status === 'overdue')) return 'overdue';
-        if (rows.some((r) => r.status === 'due-today')) return 'due-today';
-        if (rows.some((r) => r.status === 'upcoming') && age && age.days >= ageDays - 30) {
-          return 'upcoming';
-        }
-        return 'not-due';
+
+      const recordedCount = item.vaccines.filter(
+        (v) =>
+          resolveLifespanVaccineRecord(
+            activeMember,
+            item,
+            v.id,
+            memberScheduleMap,
+            doseIndex,
+          ).recorded,
+      ).length;
+
+      if (recordedCount === item.vaccines.length && item.vaccines.length > 0) {
+        return 'completed';
+      }
+      if (epiRows.length > 0 && epiRows.every((r) => r.status === 'completed')) {
+        return 'completed';
       }
     }
+
     if (!age) return 'not-due';
-    if (age.days >= ageDays + 30) return 'overdue';
-    if (age.days === ageDays) return 'due-today';
-    if (age.days > ageDays) return 'due';
-    if (age.days >= ageDays - 30) return 'upcoming';
-    return 'not-due';
+
+    const targetDate = effectiveDob
+      ? item.ageDays === 0
+        ? effectiveDob
+        : calculateScheduledDate(effectiveDob, item.ageDays, item.ageMonths)
+      : null;
+
+    if (targetDate && targetDate === referenceTodayISO) return 'due-today';
+
+    // Exact current age window
+    const reachedStart = targetDate ? referenceTodayISO >= targetDate : age.days >= item.ageDays;
+    const withinMax = item.maxAgeDays === undefined || age.days <= item.maxAgeDays;
+    if (reachedStart && withinMax) return 'active-stage';
+
+    if (targetDate ? referenceTodayISO < targetDate : age.days < item.ageDays) {
+      const daysUntil = targetDate
+        ? daysBetween(resolveReferenceToday(), parseISODate(targetDate) ?? resolveReferenceToday())
+        : item.ageDays - age.days;
+      return daysUntil <= 60 ? 'upcoming' : 'not-due';
+    }
+
+    // Past window: distinguish young child overdue EPI vs older adult reviewing childhood milestones
+    if (age.years >= 7 && item.ageDays < 1825) {
+      return 'passed';
+    }
+    return 'overdue';
   };
 
-  const getStatusColor = (status: string) => {
+  const statusMeta = (status: MilestoneStatus) => {
     switch (status) {
       case 'completed':
-        return 'badge-done';
+        return {
+          label: t('schedule.completed'),
+          dotClass: 'bg-emerald-600 dark:bg-emerald-500',
+          borderClass: 'border-emerald-300 dark:border-emerald-800',
+          textClass: 'text-emerald-700 dark:text-emerald-300',
+          icon: <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />,
+        };
+      case 'active-stage':
+        return {
+          label: t('schedule.activeStage'),
+          dotClass: 'bg-emerald-600 ring-4 ring-emerald-500/20 dark:bg-emerald-500',
+          borderClass: 'border-2 border-emerald-500 dark:border-emerald-500',
+          textClass: 'text-emerald-700 dark:text-emerald-300',
+          icon: <Compass className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />,
+        };
       case 'overdue':
-        return 'badge-overdue';
-      case 'due':
+        return {
+          label: t('schedule.overdue'),
+          dotClass: 'bg-red-600 dark:bg-red-500',
+          borderClass: 'border-2 border-red-300 dark:border-red-800',
+          textClass: 'text-red-700 dark:text-red-300',
+          icon: <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />,
+        };
       case 'due-today':
-        return 'badge-due';
+        return {
+          label: t('schedule.dueToday'),
+          dotClass: 'bg-amber-600 dark:bg-amber-500',
+          borderClass: 'border-2 border-amber-300 dark:border-amber-800',
+          textClass: 'text-amber-700 dark:text-amber-300',
+          icon: <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />,
+        };
       case 'upcoming':
-        return 'badge-upcoming';
+        return {
+          label: t('schedule.upcoming'),
+          dotClass: 'bg-sky-600 dark:bg-sky-500',
+          borderClass: 'border-sky-200 dark:border-sky-800',
+          textClass: 'text-sky-700 dark:text-sky-300',
+          icon: <TrendingUp className="h-5 w-5 text-sky-600 dark:text-sky-400" />,
+        };
+      case 'passed':
+        return {
+          label: t('schedule.childhoodPassed'),
+          dotClass: 'bg-neutral-400 dark:bg-neutral-600',
+          borderClass: '',
+          textClass: 'text-neutral-500 dark:text-neutral-400',
+          icon: <Clock className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />,
+        };
+      case 'special':
+        return {
+          label: t('schedule.asNeeded'),
+          dotClass: 'bg-teal-600 dark:bg-teal-500',
+          borderClass: 'border-teal-200 dark:border-teal-900',
+          textClass: 'text-teal-700 dark:text-teal-300',
+          icon: <Compass className="h-5 w-5 text-teal-600 dark:text-teal-400" />,
+        };
       default:
-        return 'badge-neutral';
+        return {
+          label: t('schedule.notDue'),
+          dotClass: 'bg-neutral-400 dark:bg-neutral-600',
+          borderClass: '',
+          textClass: 'text-neutral-500 dark:text-neutral-400',
+          icon: <Clock className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />,
+        };
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return t('schedule.completed');
-      case 'overdue':
-        return t('schedule.overdue');
-      case 'due-today':
-      case 'due':
-        return t('schedule.dueToday');
-      case 'upcoming':
-        return t('schedule.upcoming');
-      default:
-        return t('schedule.notDue');
-    }
-  };
+  // Current age spotlight milestone
+  const activeStageMilestone = useMemo(() => {
+    if (!currentStage) return null;
+    return lifespanSchedule.find((item) => item.stage === currentStage) ?? null;
+  }, [currentStage]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />;
-      case 'overdue':
-        return <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />;
-      case 'due':
-      case 'due-today':
-        return <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />;
-      case 'upcoming':
-        return <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />;
-      default:
-        return <Clock className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />;
-    }
-  };
-
-  // Filter schedule by age group
+  // Filtered schedule combining Life Stage AND Programme Scope cleanly
   const filteredSchedule = useMemo(() => {
-    if (ageFilter === 'all') return schedule;
-
-    const ageRanges: Record<string, [number, number]> = {
-      newborn: [0, 28],
-      infant: [29, 365],
-      toddler: [366, 1825],
-    };
-
-    const [min, max] = ageRanges[ageFilter] || [0, Infinity];
-    return schedule.filter((item) => item.ageDays >= min && item.ageDays <= max);
-  }, [ageFilter]);
+    return lifespanSchedule
+      .filter((item) => stageFilter === 'all' || item.stage === stageFilter)
+      .map((item) => {
+        if (programmeScope === 'all') return item;
+        return {
+          ...item,
+          vaccines: item.vaccines.filter((v) => v.programme === programmeScope),
+        };
+      })
+      .filter((item) => item.vaccines.length > 0);
+  }, [stageFilter, programmeScope]);
 
   const handlePrint = () => {
     if (timelineRef.current) {
@@ -177,15 +321,17 @@ export default function ScheduleTimeline() {
   };
 
   const handleDownload = () => {
-    const content = schedule
-      .map(
-        (item) =>
-          `${item.age[language]}:\n${item.vaccines.map((v) => `  - ${v.name[language]}`).join('\n')}`,
-      )
+    const content = filteredSchedule
+      .map((item) => {
+        const lines = item.vaccines.map(
+          (v) => `  - ${v.doseLabel[language]} (${t(`schedule.programme.${v.programme}`)}): ${v.note[language]}`,
+        );
+        return `${item.age[language]} — ${item.stageLabel[language]}\n${item.summary[language]}\n${lines.join('\n')}`;
+      })
       .join('\n\n');
 
     downloadTextFile(
-      `vaccination-schedule-${todayISO()}.txt`,
+      `tikatrack-all-ages-schedule-${todayISO()}.txt`,
       content,
       'text/plain;charset=utf-8',
     );
@@ -197,27 +343,26 @@ export default function ScheduleTimeline() {
 
   return (
     <div className="animate-slide-up">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 p-3">
-            <Calendar className="h-8 w-8 text-white" aria-hidden="true" />
-          </div>
-          <h1
-            className={`text-3xl sm:text-4xl font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
-          >
-            {t('schedule.title')}
-          </h1>
-        </div>
-        <p
-          className={`text-lg text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
-        >
-          {t('schedule.subtitle')}
+      {/* --- Header -------------------------------------------------------- */}
+      <header className="mb-8">
+        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
+          <Calendar className="h-4 w-4" aria-hidden="true" />
+          {t('nav.schedule')}
         </p>
-      </div>
+        <h1
+          className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}
+        >
+          {t('schedule.title')}
+        </h1>
+        <p
+          className={`section-subtitle max-w-3xl ${isBangla ? 'font-bangla' : ''}`}
+        >
+          {t('schedule.subtitleLifespan')}
+        </p>
+      </header>
 
-      {/* Member & Birth Date Selector */}
-      <div className="card-padded mb-8 no-print">
+      {/* --- Member & Birth Date Selector ---------------------------------- */}
+      <div className="card-padded mb-6 no-print">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] md:items-end">
           {profiles.length > 0 && (
             <div>
@@ -225,7 +370,7 @@ export default function ScheduleTimeline() {
                 htmlFor="schedule-member-select"
                 className={`label flex items-center gap-1.5 ${isBangla ? 'font-bangla' : ''}`}
               >
-                <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 {t('schedule.selectMember')}
               </label>
               <select
@@ -251,7 +396,7 @@ export default function ScheduleTimeline() {
             <input
               id="schedule-dob-input"
               type="date"
-              value={effectiveDob}
+              value={rawEffectiveDob}
               onChange={(e) => {
                 setSelectedMemberId('');
                 setBirthDate(e.target.value);
@@ -262,14 +407,14 @@ export default function ScheduleTimeline() {
           </div>
 
           {age && (
-            <div className="flex items-center gap-4 rounded-xl bg-emerald-50/70 p-3 dark:bg-emerald-950/30">
-              <div className="flex-1">
+            <div className="flex items-center gap-4 rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <div className="min-w-0 flex-1">
                 <p
                   className={`text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('schedule.currentAge')}
                 </p>
-                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+                <p className="truncate text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
                   {formatAge(effectiveDob, language)}
                 </p>
               </div>
@@ -279,7 +424,7 @@ export default function ScheduleTimeline() {
                 >
                   {t('schedule.progress')}
                 </p>
-                <p className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                <p className="text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
                   {localiseNumber(progressPercentage, language)}%
                 </p>
               </div>
@@ -287,12 +432,21 @@ export default function ScheduleTimeline() {
           )}
         </div>
 
+        {isInvalidOrFutureDob && (
+          <p
+            role="alert"
+            className={`mt-3 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-200 ${isBangla ? 'font-bangla' : ''}`}
+          >
+            {t('schedule.invalidDob')}
+          </p>
+        )}
+
         {/* Progress Bar */}
         {age && (
           <div className="mt-4">
-            <div className="h-3 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div className="h-2.5 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
               <div
-                className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+                className="h-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
@@ -314,133 +468,316 @@ export default function ScheduleTimeline() {
             </div>
           </div>
         )}
+
+        {/* Schedule Intelligence & Boundary Strip */}
+        {age && (
+          <div className="mt-4 rounded-xl border border-neutral-200/80 bg-neutral-50/70 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-300">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={`font-semibold text-neutral-800 dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
+                {t('schedule.intelligence.title')}
+              </span>
+              <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
+                {t(
+                  'schedule.timezoneNote',
+                  formatDate(referenceTodayISO, language),
+                  memberStats?.timezone ?? 'Asia/Dhaka',
+                )}
+              </span>
+            </div>
+            <div className={`mt-1.5 flex flex-wrap gap-x-4 gap-y-1 ${isBangla ? 'font-bangla' : ''}`}>
+              {memberAnalysis && (
+                <span>
+                  {t(
+                    'schedule.intelligence.dueToDate',
+                    memberAnalysis.stats.completedDueToDate,
+                    memberAnalysis.stats.dueToDateTotal,
+                  )}
+                </span>
+              )}
+              {memberAnalysis && memberAnalysis.stats.needsReview > 0 && (
+                <span className="font-medium text-amber-700 dark:text-amber-300">
+                  {t('schedule.intelligence.reviewNeeded', memberAnalysis.stats.needsReview)}
+                </span>
+              )}
+              <span>{t('schedule.intelligence.noCatchUpIntervals')}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Current Life-Stage Focus Banner */}
+        {age && currentStage && activeStageMilestone && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+            <div className="min-w-0">
+              <p className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                {t('schedule.currentFocusTitle')}
+              </p>
+              <p className={`text-xs text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                {t(
+                  'schedule.currentFocusSubtitle',
+                  formatAge(effectiveDob, language),
+                  t(`schedule.stage.${currentStage}`),
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {stageFilter !== currentStage ? (
+                <button
+                  type="button"
+                  onClick={() => setStageFilter(currentStage)}
+                  className="btn-primary btn-sm whitespace-nowrap shrink-0"
+                >
+                  {t('schedule.jumpToCurrentStage')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setStageFilter('all')}
+                  className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                >
+                  {t('schedule.showFullTimeline')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Actions */}
-      <div className="mb-6 flex flex-wrap items-center gap-3 no-print">
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="btn-secondary flex items-center gap-2 whitespace-nowrap shrink-0"
+      {/* --- Life-Stage Filter Strip + Programme Scope + Actions ----------- */}
+      <div className="mb-6 space-y-3 no-print">
+        <div
+          role="group"
+          aria-label={t('schedule.filter')}
+          className="flex flex-wrap gap-1.5 rounded-xl border border-neutral-200 bg-neutral-100/80 p-1.5 dark:border-neutral-800 dark:bg-neutral-900"
         >
-          <Printer className="h-4 w-4" aria-hidden="true" />
-          <span className={isBangla ? 'font-bangla' : ''}>{t('schedule.print')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={handleDownload}
-          className="btn-secondary flex items-center gap-2 whitespace-nowrap shrink-0"
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          <span className={isBangla ? 'font-bangla' : ''}>{t('schedule.download')}</span>
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <Filter className="h-5 w-5 text-neutral-600 dark:text-neutral-300" aria-hidden="true" />
-          <select
-            aria-label={t('schedule.filter')}
-            value={ageFilter}
-            onChange={(e) => setAgeFilter(e.target.value)}
-            className="input-field w-auto"
-          >
-            <option value="all">{t('schedule.all')}</option>
-            <option value="newborn">{t('schedule.newborn')}</option>
-            <option value="infant">{t('schedule.infant')}</option>
-            <option value="toddler">{t('schedule.toddler')}</option>
-          </select>
+          {LIFE_STAGE_OPTIONS.map((option) => {
+            const active = stageFilter === option.key;
+            const isCurrent = currentStage === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setStageFilter(option.key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                  active
+                    ? 'bg-white text-emerald-700 shadow-sm dark:bg-neutral-800 dark:text-emerald-300'
+                    : isCurrent
+                      ? 'text-emerald-700 hover:bg-white/60 dark:text-emerald-400 dark:hover:bg-neutral-800/60'
+                      : 'text-neutral-600 hover:bg-white/60 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800/60 dark:hover:text-white'
+                } ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {t(option.labelKey)}
+                <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">
+                  {option.ageBand[language]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Filter className="h-4 w-4 text-neutral-500 dark:text-neutral-400" aria-hidden="true" />
+            {PROGRAMME_SCOPES.map((scope) => {
+              const active = programmeScope === scope;
+              return (
+                <button
+                  key={scope}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setProgrammeScope(scope)}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300'
+                  } ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {t(`schedule.scope.${scope}`)}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400">
+              {t('schedule.milestoneCount', filteredSchedule.length)}
+            </span>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="btn-secondary btn-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            >
+              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className={isBangla ? 'font-bangla' : ''}>{t('schedule.print')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="btn-secondary btn-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className={isBangla ? 'font-bangla' : ''}>{t('schedule.download')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Timeline */}
-      <div ref={timelineRef} className="print-area relative">
-        <div className="absolute top-0 bottom-0 left-7 w-0.5 bg-gradient-to-b from-emerald-500 via-teal-500 to-cyan-500 sm:left-8" />
+      {/* --- Timeline ------------------------------------------------------ */}
+      {filteredSchedule.length === 0 ? (
+        <div className="card-padded text-center">
+          <p className={`text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+            {t('schedule.emptyFiltered')}
+          </p>
+          <button
+            type="button"
+            className="btn-secondary btn-sm mt-4"
+            onClick={() => {
+              setStageFilter('all');
+              setProgrammeScope('all');
+            }}
+          >
+            {t('schedule.resetFilters')}
+          </button>
+        </div>
+      ) : (
+        <div ref={timelineRef} className="print-area relative">
+          <div
+            className="absolute top-0 bottom-0 left-6 hidden w-0.5 bg-neutral-200 sm:block dark:bg-neutral-800"
+            aria-hidden="true"
+          />
 
-        <div className="space-y-6">
-          {filteredSchedule.map((item, index) => {
-            const status = getMilestoneStatus(item.ageDays, item.vaccines);
+          <div className="space-y-6">
+            {filteredSchedule.map((item) => {
+              const status = getMilestoneStatus(item);
+              const meta = statusMeta(status);
+              const targetDate =
+                effectiveDob && item.ageDays !== null && item.ageDays > 0
+                  ? calculateScheduledDate(effectiveDob, item.ageDays, item.ageMonths)
+                  : effectiveDob && item.ageDays === 0
+                    ? effectiveDob
+                    : null;
+              const targetParsed = targetDate ? parseISODate(targetDate) : null;
+              const targetDeltaDays =
+                targetParsed !== null
+                  ? daysBetween(resolveReferenceToday(), targetParsed)
+                  : item.ageDays !== null && age
+                    ? item.ageDays - age.days
+                    : null;
+              const basisText =
+                targetDate && item.ageDays !== null
+                  ? typeof item.ageMonths === 'number'
+                    ? t('schedule.basis.ageMonths', localiseNumber(item.ageMonths, language))
+                    : item.ageDays === 0
+                      ? t('schedule.basis.birth')
+                      : t('schedule.basis.ageDays', localiseNumber(item.ageDays, language))
+                  : null;
 
-            return (
-              <div
-                key={item.ageDays}
-                className="relative flex gap-4 sm:gap-6 animate-slide-in-right"
-                style={{ animationDelay: `${index * 0.06}s` }}
-              >
-                {/* Timeline Dot */}
-                <div className="relative z-10 shrink-0">
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-full shadow-md sm:h-16 sm:w-16 ${
-                      status === 'completed'
-                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                        : status === 'overdue'
-                          ? 'bg-gradient-to-br from-red-500 to-red-600'
-                          : status === 'due' || status === 'due-today'
-                            ? 'bg-gradient-to-br from-amber-500 to-amber-600'
-                            : status === 'upcoming'
-                              ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                              : 'bg-gradient-to-br from-emerald-600 to-teal-700'
-                    }`}
-                  >
-                    {status === 'completed' ? (
-                      <CheckCircle2 className="h-7 w-7 text-white" />
-                    ) : (
-                      <Clock className="h-7 w-7 text-white" />
-                    )}
-                  </div>
-                  {status === 'overdue' && (
-                    <div className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-600">
-                      <AlertCircle className="h-4 w-4 text-white" />
+              return (
+                <section
+                  id={`milestone-card-${item.id}`}
+                  key={item.id}
+                  aria-labelledby={`milestone-heading-${item.id}`}
+                  className="relative flex gap-4 sm:gap-6"
+                >
+                  {/* Timeline Node */}
+                  <div className="relative z-10 hidden shrink-0 sm:block">
+                    <div
+                      className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm ${meta.dotClass}`}
+                      aria-hidden="true"
+                    >
+                      {status === 'completed' ? (
+                        <CheckCircle2 className="h-5 w-5" />
+                      ) : status === 'overdue' ? (
+                        <AlertCircle className="h-5 w-5" />
+                      ) : (
+                        <Clock className="h-5 w-5" />
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Content Card */}
-                <div className="flex-1">
+                  {/* Milestone Card */}
                   <div
-                    className={`card-padded transition-all hover:shadow-lg ${
-                      status === 'completed'
-                        ? 'border-emerald-300 dark:border-emerald-800'
-                        : status === 'overdue'
-                          ? 'border-2 border-red-300 dark:border-red-800'
-                          : status === 'due' || status === 'due-today'
-                            ? 'border-2 border-amber-300 dark:border-amber-800'
-                            : ''
+                    className={`card-padded flex-1 transition-shadow ${meta.borderClass} ${
+                      highlightedMilestoneId === item.id
+                        ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-neutral-950'
+                        : ''
                     }`}
                   >
-                    <div className="mb-4 flex items-start justify-between gap-2">
-                      <div>
-                        <h3
-                          className={`mb-2 text-xl sm:text-2xl font-bold text-emerald-700 dark:text-emerald-400 ${isBangla ? 'font-bangla' : ''}`}
+                    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-neutral-100 pb-4 dark:border-neutral-800">
+                      <div className="min-w-0">
+                        <p className={`text-xs font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400 ${isBangla ? 'font-bangla' : ''}`}>
+                          {item.stageLabel[language]}
+                        </p>
+                        <h2
+                          id={`milestone-heading-${item.id}`}
+                          className={`mt-1 text-xl font-bold text-neutral-900 tabular-nums dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                         >
                           {item.age[language]}
-                        </h3>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={getStatusColor(status)}>{getStatusLabel(status)}</span>
-                          {age && (
-                            <span className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-                              {age.days >= item.ageDays
-                                ? `${localiseNumber(age.days - item.ageDays, language)} ${language === 'en' ? 'days ago' : 'দিন আগে'}`
-                                : `${localiseNumber(item.ageDays - age.days, language)} ${language === 'en' ? 'days left' : 'দিন বাকি'}`}
-                            </span>
+                        </h2>
+                        <p className={`mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                          <span className={meta.textClass}>{meta.label}</span>
+                          {targetDate && (
+                            <>
+                              <span aria-hidden="true" className="text-neutral-300 dark:text-neutral-700">·</span>
+                              <span className="text-neutral-500 dark:text-neutral-400">
+                                {t('schedule.targetDate')}: {formatDate(targetDate, language)}
+                              </span>
+                            </>
                           )}
-                        </div>
+                          {targetDeltaDays !== null && (
+                            <>
+                              <span aria-hidden="true" className="text-neutral-300 dark:text-neutral-700">·</span>
+                              <span className="text-neutral-500 dark:text-neutral-400">
+                                {targetDeltaDays <= 0
+                                  ? targetDeltaDays === 0
+                                    ? t('schedule.dueToday')
+                                    : `${localiseNumber(Math.abs(targetDeltaDays), language)} ${language === 'en' ? 'days ago' : 'দিন আগে'}`
+                                  : `${localiseNumber(targetDeltaDays, language)} ${language === 'en' ? 'days left' : 'দিন বাকি'}`}
+                              </span>
+                            </>
+                          )}
+                          {basisText && (
+                            <>
+                              <span aria-hidden="true" className="text-neutral-300 dark:text-neutral-700">·</span>
+                              <span className="text-neutral-500 dark:text-neutral-400">{basisText}</span>
+                            </>
+                          )}
+                        </p>
                       </div>
-                      {getStatusIcon(status)}
+                      <div aria-hidden="true">{meta.icon}</div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <p className={`mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                      {item.summary[language]}
+                    </p>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {item.vaccines.map((vaccine, vIndex) => {
                         const vaccineData = allVaccines.find((v) => v.id === vaccine.id);
-                        const colorConfig =
-                          vaccineColors[vaccineData?.color || 'emerald'] || vaccineColors.emerald;
-                        const memberDose = memberScheduleMap.get(`${vaccine.id}@${item.ageDays}`);
+                        const clinical = vaccineData ? getVaccineClinicalProfile(vaccineData) : null;
+                        const resolved = resolveLifespanVaccineRecord(
+                          activeMember,
+                          item,
+                          vaccine.id,
+                          memberScheduleMap,
+                          doseIndex,
+                        );
+                        const recordedDate = resolved.date;
+                        const isRecorded = resolved.recorded;
                         const doseNum =
-                          memberDose?.doseNumber ??
-                          doseNumberForMilestone(vaccine.id, item.ageDays) ??
-                          1;
+                          item.ageDays !== null
+                            ? doseNumberForMilestone(vaccine.id, item.ageDays) ??
+                              resolved.suggestedDoseNumber
+                            : resolved.suggestedDoseNumber;
 
                         return (
                           <div
                             key={`${vaccine.id}-${vIndex}`}
-                            className={`${colorConfig.bg} ${colorConfig.text} ${colorConfig.border} flex flex-col justify-between gap-2 rounded-xl border p-4 shadow-sm transition-all hover:shadow-md`}
+                            className={`flex flex-col justify-between gap-2.5 rounded-xl border p-4 transition-colors ${
+                              isRecorded
+                                ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20'
+                                : 'border-neutral-200 bg-neutral-50/60 hover:border-emerald-300 dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:border-emerald-800'
+                            }`}
                           >
                             <div
                               onClick={() => vaccineData && setSelectedVaccine(vaccineData)}
@@ -452,60 +789,81 @@ export default function ScheduleTimeline() {
                               }}
                               role={vaccineData ? 'button' : undefined}
                               tabIndex={vaccineData ? 0 : undefined}
-                              className={`flex items-center gap-3 ${vaccineData ? 'cursor-pointer' : ''}`}
+                              className={`flex items-start gap-3 text-left ${vaccineData ? 'cursor-pointer' : ''}`}
                             >
-                              <span className="text-3xl" aria-hidden="true">
+                              <span className="text-2xl leading-none" aria-hidden="true">
                                 {vaccineData?.icon || '💉'}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className={`font-bold ${isBangla ? 'font-bangla' : ''}`}>
-                                  {vaccine.name[language]}
+                                <p className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                                  {vaccine.doseLabel[language]}
                                 </p>
-                                {vaccineData && (
-                                  <p className="text-xs opacity-90">
-                                    {vaccineData.efficacy}{' '}
-                                    {language === 'en' ? 'effective' : 'কার্যকর'}
+                                <p className={`mt-0.5 text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                                  <span>{t(`schedule.programme.${vaccine.programme}`)}</span>
+                                  {vaccineData?.efficacy ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <span>{vaccineData.efficacy}</span>
+                                    </>
+                                  ) : null}
+                                </p>
+                                <p className={`mt-1.5 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                                  {vaccine.note[language]}
+                                </p>
+                                {clinical && (
+                                  <p className={`mt-1 line-clamp-1 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                                    {clinical.route[language]}
                                   </p>
                                 )}
                               </div>
                             </div>
 
-                            {activeMember && memberDose && (
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/25 pt-2 text-xs">
-                                {memberDose.status === 'completed' ? (
-                                  <span className="inline-flex items-center gap-1 font-semibold">
-                                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                    {memberDose.actualDate
-                                      ? formatDate(memberDose.actualDate, language)
-                                      : t('schedule.completed')}
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span className="font-medium opacity-95">
-                                      {getStatusLabel(memberDose.status)}
-                                    </span>
-                                    <Link
-                                      to={`/tracker?member=${encodeURIComponent(activeMember.id)}&vaccine=${encodeURIComponent(vaccine.id)}&dose=${doseNum}&action=record`}
-                                      className="inline-flex items-center gap-1 rounded-lg bg-white/25 px-2 py-1 font-semibold hover:bg-white/35 no-print"
-                                    >
-                                      <ClipboardPlus className="h-3 w-3" aria-hidden="true" />
-                                      {t('schedule.recordDose')}
-                                    </Link>
-                                  </>
-                                )}
-                              </div>
-                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/80 pt-2.5 text-xs dark:border-neutral-800">
+                              {isRecorded ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {recordedDate
+                                    ? t('schedule.recordedOn', formatDate(recordedDate, language))
+                                    : t('schedule.completed')}
+                                </span>
+                              ) : activeMember ? (
+                                <Link
+                                  to={`/tracker?member=${encodeURIComponent(activeMember.id)}&vaccine=${encodeURIComponent(vaccine.id)}&dose=${doseNum}&action=record`}
+                                  className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline dark:text-emerald-400 no-print"
+                                >
+                                  <ClipboardPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {t('schedule.recordDose')}
+                                </Link>
+                              ) : vaccineData ? (
+                                <Link
+                                  to={`/vaccines/${vaccineData.id}`}
+                                  className="link text-xs font-medium no-print"
+                                >
+                                  {t('vaccines.detail.openFullProfile')}
+                                </Link>
+                              ) : null}
+
+                              {vaccineData && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedVaccine(vaccineData)}
+                                  className="ml-auto text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white no-print"
+                                >
+                                  {t('vaccines.detail.quickOverview')}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                </section>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Vaccine Modal */}
       {selectedVaccine && (

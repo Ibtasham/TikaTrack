@@ -7,12 +7,15 @@ import {
   Calendar,
   ChevronDown,
   ClipboardList,
+  Compass,
   Globe,
   IdCard,
   MapPin,
   Menu,
   Monitor,
   Moon,
+  Search,
+  Snowflake,
   Sun,
   Syringe,
   User,
@@ -21,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import { InstallButton } from '../components/InstallButton';
+import { openCommandPalette } from '../lib/commandPalette';
 import Logo from '../components/Logo';
 import { TextSizeButton } from '../components/TextSizeButton';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,6 +48,8 @@ const PRIMARY_NAV: NavItem[] = [
 ];
 
 const SECONDARY_NAV: NavItem[] = [
+  { to: '/readiness', labelKey: 'nav.readiness', icon: Compass },
+  { to: '/cold-chain', labelKey: 'nav.coldChain', icon: Snowflake },
   { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3 },
   { to: '/reminders', labelKey: 'nav.reminders', icon: Bell },
   { to: '/compare', labelKey: 'nav.compare', icon: ClipboardList },
@@ -150,6 +156,20 @@ export function Header() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:ml-0">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+            aria-label={t('nav.quickSearch')}
+            title={`${t('nav.quickSearch')} (${t('cmd.shortcutHint')})`}
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">{t('cmd.triggerLabel')}</span>
+            <kbd className="hidden rounded border border-neutral-300 bg-white px-1 py-0.5 font-mono text-[10px] text-neutral-500 xl:inline dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+              ⌘K
+            </kbd>
+          </button>
+
           <InstallButton className="btn-ghost btn-sm whitespace-nowrap" />
 
           <TextSizeButton />
@@ -248,10 +268,10 @@ export function Header() {
           </ul>
           <p className="mt-3 flex items-center gap-2 border-t border-neutral-100 pt-3 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
             <span
-              className={`h-2 w-2 rounded-full ${backend === 'supabase' ? 'bg-emerald-500' : 'bg-neutral-400'}`}
+              className={`h-2 w-2 rounded-full ${backend !== 'local' ? 'bg-emerald-500' : 'bg-neutral-400'}`}
               aria-hidden="true"
             />
-            {backend === 'supabase' ? t('common.data.cloudSync') : t('common.data.localOnly')}
+            {backend !== 'local' ? t('common.data.cloudSync') : t('common.data.localOnly')}
           </p>
         </nav>
       )}

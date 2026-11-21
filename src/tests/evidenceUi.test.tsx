@@ -37,32 +37,34 @@ describe('vaccine detail evidence panel', () => {
     expect(screen.getByText(en['vaccines.evidence.title'])).toBeTruthy();
     expect(screen.getAllByText(en['vaccines.programme.bd-nip-routine']).length).toBeGreaterThan(0);
     expect(screen.getAllByText(en['vaccines.productStatus.licensed-bd']).length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(en['vaccines.review.requires-professional-review']).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(en['vaccines.review.evidence-verified']).length).toBeGreaterThan(0);
 
-    // The source that was actually read, with its publisher, is listed.
-    expect(screen.getByText('Immunization in Bangladesh')).toBeTruthy();
-    expect(screen.getAllByText(/WHO Country Office for Bangladesh/).length).toBeGreaterThan(0);
+    // Verified WHO position paper source with publisher is listed.
+    expect(screen.getByText('Measles vaccines: WHO position paper – April 2017')).toBeTruthy();
+    expect(screen.getAllByText(/World Health Organization/).length).toBeGreaterThan(0);
 
     // An effective date does not exist yet, and the page says so instead of guessing.
     expect(screen.getAllByText(en['vaccines.evidence.notEstablished']).length).toBeGreaterThan(0);
   });
 
-  it('surfaces the open conflict instead of picking a side', async () => {
+  it('surfaces conflict resolutions with sources and keeps unresolved conflicts open', async () => {
     renderAt('/vaccines/mr');
     await waitFor(() => expect(document.getElementById('main-content')).not.toBeNull());
 
     expect(screen.getByText(en['vaccines.evidence.conflicts'])).toBeTruthy();
-    expect(screen.getAllByText(en['vaccines.evidence.conflictStatus']).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(en['vaccines.evidence.conflictResolved']).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/C-002/).length).toBeGreaterThan(0);
+
+    renderAt('/vaccines/tcv');
+    await waitFor(() => expect(screen.getAllByText(/C-006/).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(en['vaccines.evidence.conflictStatus']).length).toBeGreaterThan(0);
     expect(
       screen.getAllByText(new RegExp(en['vaccines.evidence.requiredAction'])).length,
     ).toBeGreaterThan(0);
   });
 
-  it('warns that an unreviewed entry must not be used to time a dose', async () => {
-    renderAt('/vaccines/mr');
+  it('warns that an unresolved or unreviewed entry must not be used to time a dose', async () => {
+    renderAt('/vaccines/tcv');
     await waitFor(() => expect(document.getElementById('main-content')).not.toBeNull());
     expect(screen.getAllByText(en['vaccines.evidence.reviewBanner']).length).toBeGreaterThan(0);
   });
@@ -73,6 +75,8 @@ describe('vaccine detail evidence panel', () => {
     expect(screen.queryByText(ERROR_MARKER)).toBeNull();
 
     expect(screen.getAllByText(en['vaccines.evidence.researchBanner']).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(en['vaccines.researchOnlyDoses']).length).toBeGreaterThan(0);
+    expect(screen.queryByText(en['vaccines.detail.recordDose'])).toBeNull();
     expect(screen.getAllByText(en['vaccines.productStatus.in-development']).length).toBeGreaterThan(
       0,
     );
@@ -102,9 +106,7 @@ describe('vaccine detail evidence panel', () => {
     const bn = translations.bn;
     expect(screen.getByText(bn['vaccines.evidence.title'])).toBeTruthy();
     expect(screen.getAllByText(bn['vaccines.programme.bd-nip-routine']).length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(bn['vaccines.review.requires-professional-review']).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(bn['vaccines.review.evidence-verified']).length).toBeGreaterThan(0);
   });
 
   it('still renders an unknown vaccine id without crashing', async () => {

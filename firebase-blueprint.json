@@ -1,0 +1,190 @@
+{
+  "entities": {
+    "UserPrivateAccount": {
+      "title": "UserPrivateAccount",
+      "description": "Private PII account record isolated under the user's private subcollection.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified account email address."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "User display name."
+        },
+        "languagePreference": {
+          "type": "string",
+          "enum": ["en", "bn"],
+          "description": "Preferred UI language."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["ownerUid", "email", "displayName", "languagePreference", "createdAt", "updatedAt"]
+    },
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Non-PII display summary for household identification.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerUid", "displayName", "createdAt", "updatedAt"]
+    },
+    "FamilyProfile": {
+      "title": "FamilyProfile",
+      "description": "Synchronized family member vaccination & growth record owned by a verified user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "relationship": {
+          "type": "string",
+          "enum": ["self", "child", "spouse", "parent", "sibling", "other"]
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["female", "male", "other"]
+        },
+        "events": {
+          "type": "array",
+          "description": "Bounded list of administered dose events (max 250)."
+        },
+        "growth": {
+          "type": "array",
+          "description": "Bounded list of growth measurements (max 250)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "name", "dateOfBirth", "events", "growth", "createdAt", "updatedAt"]
+    },
+    "StudioNote": {
+      "title": "StudioNote",
+      "description": "Saved consultation summary or clinical note from TikaBot AI Studio.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "modelUsed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "title", "summary", "modelUsed", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateAccount" },
+      "description": "Owner-only private PII account document ('account')."
+    },
+    "/users/{userId}/public/{docId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Non-PII public profile document ('profile')."
+    },
+    "/users/{userId}/familyProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/FamilyProfile" },
+      "description": "Household immunization and growth profiles owned by the authenticated user."
+    },
+    "/users/{userId}/studioNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/StudioNote" },
+      "description": "Saved TikaBot AI consultation summaries."
+    }
+  }
+}

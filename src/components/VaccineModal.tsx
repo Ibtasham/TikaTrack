@@ -1,4 +1,19 @@
-import { X, Calendar, Heart, AlertCircle, TrendingUp, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  AlertCircle,
+  Calendar,
+  ClipboardCheck,
+  ExternalLink,
+  FlaskConical,
+  Heart,
+  Snowflake,
+  Syringe,
+  TrendingUp,
+  Users,
+  X,
+} from 'lucide-react';
+
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
 import { type Vaccine, vaccineColors } from '../data/vaccines';
 import { useBodyScrollLock, useFocusTrap } from '../hooks';
 import { useI18n } from '../i18n';
@@ -10,7 +25,9 @@ interface VaccineModalProps {
 
 export function VaccineModal({ vaccine, onClose }: VaccineModalProps) {
   const { language, t } = useI18n();
+  const isBangla = language === 'bn';
   const colorConfig = vaccineColors[vaccine.color] || vaccineColors.emerald;
+  const clinical = getVaccineClinicalProfile(vaccine);
 
   // Without a trap, Tab walks out of the modal into the page behind it, and
   // without Escape the only way out is a mouse click on the close button.
@@ -19,7 +36,7 @@ export function VaccineModal({ vaccine, onClose }: VaccineModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -27,234 +44,204 @@ export function VaccineModal({ vaccine, onClose }: VaccineModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="vaccine-modal-title"
-        className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in dark:bg-neutral-900"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white shadow-2xl animate-scale-in dark:border-neutral-800 dark:bg-neutral-900"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`bg-gradient-to-br ${colorConfig.bg} p-6 rounded-t-3xl relative`}>
+        <div className={`relative rounded-t-2xl p-6 ${colorConfig.bg}`}>
           <button
             type="button"
             onClick={onClose}
             aria-label={t('common.a11y.dialogClose')}
-            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+            className="absolute top-4 right-4 rounded-lg bg-white/20 p-2 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-white"
           >
-            <X className="w-5 h-5 text-white" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <div className="flex items-start gap-4">
-            <div className="text-6xl">{vaccine.icon}</div>
-            <div className="flex-1">
+          <div className="flex items-start gap-4 pr-10">
+            <span className="text-4xl sm:text-5xl" aria-hidden="true">
+              {vaccine.icon}
+            </span>
+            <div className="min-w-0 flex-1">
               <h2
-                className={`text-3xl font-bold ${colorConfig.text} mb-1 ${language === 'bn' ? 'font-bangla' : ''}`}
+                id="vaccine-modal-title"
+                className={`text-2xl font-bold sm:text-3xl ${colorConfig.text} ${isBangla ? 'font-bangla' : ''}`}
               >
                 {vaccine.name[language]}
               </h2>
-              <p
-                className={`${colorConfig.text} opacity-90 ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
+              <p className={`mt-1 text-sm ${colorConfig.text} opacity-90 ${isBangla ? 'font-bangla' : ''}`}>
                 {vaccine.fullName[language]}
               </p>
-              <div className="flex gap-2 mt-3">
-                <span className="px-3 py-1 bg-white/20 rounded-full text-xs font-semibold backdrop-blur-sm">
-                  {vaccine.category === 'routine'
-                    ? language === 'en'
-                      ? 'Routine'
-                      : 'নিয়মিত'
-                    : vaccine.category === 'campaign'
-                      ? language === 'en'
-                        ? 'Campaign'
-                        : 'ক্যাম্পেইন'
-                      : vaccine.category === 'special'
-                        ? language === 'en'
-                          ? 'Special'
-                          : 'বিশেষ'
-                        : vaccine.category === 'recommended'
-                          ? language === 'en'
-                            ? 'Recommended'
-                            : 'সুপারিশকৃত'
-                          : language === 'en'
-                            ? 'Other'
-                            : 'অন্যান্য'}
-                </span>
-                <span className="px-3 py-1 bg-white/20 rounded-full text-xs font-semibold backdrop-blur-sm">
-                  {vaccine.doses} {language === 'en' ? 'dose(s)' : 'ডোজ'}
-                </span>
-              </div>
+              <p className={`mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium ${colorConfig.text} opacity-95 tabular-nums`}>
+                <span>{t(`vaccines.category.${vaccine.category}`)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{t('vaccines.doses', vaccine.doses)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{vaccine.introduced}</span>
+              </p>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Disease Prevention */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Heart className="w-5 h-5 text-red-500" />
-              <h3
-                className={`text-lg font-bold text-neutral-900 dark:text-white ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Disease Prevention' : 'রোগ প্রতিরোধ'}
-              </h3>
-            </div>
-            <p
-              className={`text-neutral-700 dark:text-neutral-300 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.disease[language]}
-            </p>
-          </div>
-
-          {/* Schedule */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Calendar className="w-5 h-5 text-emerald-500" />
-              <h3
-                className={`text-lg font-bold text-neutral-900 dark:text-white ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Vaccination Schedule' : 'টিকাদান সূচি'}
-              </h3>
-            </div>
-            <p
-              className={`text-neutral-700 dark:text-neutral-300 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.schedule[language]}
-            </p>
-          </div>
-
-          {/* Efficacy */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-5 h-5 text-blue-500" />
-              <h3
-                className={`text-lg font-bold text-neutral-900 dark:text-white ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Effectiveness' : 'কার্যকারিতা'}
-              </h3>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-neutral-200 dark:bg-neutral-700 rounded-full h-3">
-                <div
-                  className="bg-gradient-to-r from-emerald-500 to-teal-500 h-3 rounded-full transition-all"
-                  style={{ width: vaccine.efficacy }}
-                ></div>
+        <div className="space-y-5 p-6">
+          {/* Core Disease & Schedule */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+                <Heart className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+                {t('vaccines.detail.disease')}
               </div>
-              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                {vaccine.efficacy}
-              </span>
+              <p className={`mt-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
+                {vaccine.disease[language]}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+                <Calendar className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {t('vaccines.detail.schedule')}
+              </div>
+              <p className={`mt-1.5 text-sm font-medium text-neutral-900 tabular-nums dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
+                {vaccine.schedule[language]}
+              </p>
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <h3
-              className={`text-lg font-bold text-neutral-900 dark:text-white mb-2 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {language === 'en' ? 'About This Vaccine' : 'এই টিকা সম্পর্কে'}
-            </h3>
-            <p
-              className={`text-neutral-700 dark:text-neutral-300 leading-relaxed ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.description[language]}
-            </p>
-          </div>
+          {/* Pharmacology & Administration Specs */}
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
+              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+                <FlaskConical className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {t('vaccines.detail.platform')}
+              </dt>
+              <dd className={`mt-1 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                {clinical.platform[language]}
+              </dd>
+            </div>
 
-          {/* Common Side Effects */}
-          <div className="bg-blue-50 dark:bg-blue-950/40 rounded-2xl p-4">
-            <h3
-              className={`text-lg font-bold text-blue-900 dark:text-blue-200 mb-2 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {language === 'en' ? 'Common Side Effects' : 'সাধারণ পার্শ্বপ্রতিক্রিয়া'}
-            </h3>
-            <p
-              className={`text-blue-800 dark:text-blue-200 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.commonEffects[language]}
-            </p>
-          </div>
+            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
+              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+                <Syringe className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {t('vaccines.detail.route')}
+              </dt>
+              <dd className={`mt-1 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                {clinical.route[language]} · <span className="font-mono text-xs tabular-nums">{clinical.doseVolume[language]}</span>
+              </dd>
+            </div>
 
-          {/* Serious Reactions */}
-          <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              <h3
-                className={`text-lg font-bold text-amber-900 dark:text-amber-200 ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Serious Reactions (Rare)' : 'গুরুতর প্রতিক্রিয়া (বিরল)'}
+            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
+              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+                <Snowflake className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" aria-hidden="true" />
+                {t('vaccines.detail.coldChain')}
+              </dt>
+              <dd className={`mt-1 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                {clinical.coldChain[language]}
+              </dd>
+            </div>
+
+            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
+              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {t('vaccines.efficacy')}
+              </dt>
+              <dd className={`mt-1 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{vaccine.efficacy}</span> — {clinical.immunityProfile[language]}
+              </dd>
+            </div>
+          </dl>
+
+          {/* Description & Dosing Catch-Up */}
+          <div className="space-y-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+            <div>
+              <h3 className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                {t('vaccines.detail.description')}
               </h3>
-            </div>
-            <p
-              className={`text-amber-800 dark:text-amber-200 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.seriousEffects[language]}
-            </p>
-          </div>
-
-          {/* Contraindications */}
-          <div className="bg-red-50 dark:bg-red-950/40 rounded-2xl p-4">
-            <h3
-              className={`text-lg font-bold text-red-900 dark:text-red-200 mb-2 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {language === 'en' ? 'Contraindications' : 'কন্ট্রাইন্ডিকেশন'}
-            </h3>
-            <p
-              className={`text-red-800 dark:text-red-200 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.contraindications[language]}
-            </p>
-          </div>
-
-          {/* Disease Risk */}
-          <div className="bg-purple-50 dark:bg-purple-950/40 rounded-2xl p-4">
-            <h3
-              className={`text-lg font-bold text-purple-900 dark:text-purple-200 mb-2 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {language === 'en' ? 'Risk Without Vaccination' : 'টিকা ছাড়া ঝুঁকি'}
-            </h3>
-            <p
-              className={`text-purple-800 dark:text-purple-200 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {vaccine.diseaseRisk[language]}
-            </p>
-          </div>
-
-          {/* Additional Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-xl p-4">
-              <p
-                className={`text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1 ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Introduced' : 'প্রবর্তিত'}
-              </p>
-              <p className="text-lg font-bold text-neutral-900 dark:text-white">
-                {vaccine.introduced}
+              <p className={`mt-1 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                {vaccine.description[language]}
               </p>
             </div>
-            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-xl p-4">
-              <p
-                className={`text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1 ${language === 'bn' ? 'font-bangla' : ''}`}
-              >
-                {language === 'en' ? 'Age Group' : 'বয়স গ্রুপ'}
+
+            <div>
+              <h3 className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                {t('vaccines.detail.dosingProtocol')}
+              </h3>
+              <p className={`mt-1 text-sm leading-relaxed text-neutral-700 tabular-nums dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                {clinical.dosingProtocol[language]}
               </p>
-              <p className="text-lg font-bold text-neutral-900 dark:text-white capitalize">
-                {vaccine.ageGroup}
+            </div>
+
+            <div>
+              <h3 className={`flex items-center gap-1.5 text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {t('vaccines.detail.specialPopulations')}
+              </h3>
+              <p className={`mt-1 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                {clinical.specialPopulations[language]}
               </p>
             </div>
           </div>
 
-          {/* Source */}
-          <div className="bg-neutral-50 dark:bg-neutral-800 rounded-2xl p-4">
-            <h3
-              className={`text-lg font-bold text-neutral-900 dark:text-white mb-2 ${language === 'bn' ? 'font-bangla' : ''}`}
-            >
-              {language === 'en' ? 'Source' : 'উৎস'}
+          {/* Safety, Contraindications & Aftercare */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+              <h3 className={`text-sm font-bold text-amber-950 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}>
+                {t('vaccines.detail.commonEffects')}
+              </h3>
+              <p className={`mt-1 text-xs leading-relaxed text-amber-900 dark:text-amber-100/90 ${isBangla ? 'font-bangla' : ''}`}>
+                {vaccine.commonEffects[language]}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/30">
+              <h3 className={`flex items-center gap-1.5 text-sm font-bold text-red-950 dark:text-red-200 ${isBangla ? 'font-bangla' : ''}`}>
+                <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                {t('vaccines.detail.contraindications')}
+              </h3>
+              <p className={`mt-1 text-xs leading-relaxed text-red-900 dark:text-red-100/90 ${isBangla ? 'font-bangla' : ''}`}>
+                {vaccine.contraindications[language]}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+            <h3 className={`flex items-center gap-1.5 text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+              <ClipboardCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              {t('vaccines.detail.aftercare')}
             </h3>
+            <p className={`mt-1 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+              {clinical.aftercare[language]}
+            </p>
+          </div>
+
+          {/* Actions & Source */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
             <a
               href={vaccine.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+              className="link inline-flex items-center gap-1.5 text-xs"
             >
-              {vaccine.source} <ExternalLink className="w-4 h-4" />
+              {vaccine.source}
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/vaccines/${vaccine.id}`}
+                onClick={onClose}
+                className="btn-primary btn-sm whitespace-nowrap shrink-0"
+              >
+                {t('vaccines.detail.openFullProfile')}
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+              >
+                {t('common.actions.close')}
+              </button>
+            </div>
           </div>
         </div>
       </div>

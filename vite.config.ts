@@ -52,8 +52,15 @@ function pwaAssets(): Plugin {
   const manifestPath = fileURLToPath(new URL('./manifest.template.json', import.meta.url));
   const swPath = fileURLToPath(new URL('./sw.template.js', import.meta.url));
   const manifestHref = `${base}manifest.webmanifest`;
+  const swHref = `${base}sw.js`;
   const renderManifest = async (): Promise<string> =>
     (await readFile(manifestPath, 'utf8')).split('{{BASE}}').join(base);
+  const renderDevSw = async (): Promise<string> =>
+    (await readFile(swPath, 'utf8'))
+      .split('{{CACHE_NAME}}')
+      .join('tikatrack-dev')
+      .split('{{BASE}}')
+      .join(base);
 
   return {
     name: 'tikatrack:pwa-assets',
@@ -64,13 +71,26 @@ function pwaAssets(): Plugin {
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const pathname = (request.url ?? '').split('?')[0];
-        if (pathname !== manifestHref) return next();
-        renderManifest()
-          .then((body) => {
-            response.setHeader('Content-Type', 'application/manifest+json');
-            response.end(body);
-          })
-          .catch(next);
+        if (pathname === manifestHref) {
+          renderManifest()
+            .then((body) => {
+              response.setHeader('Content-Type', 'application/manifest+json');
+              response.end(body);
+            })
+            .catch(next);
+          return;
+        }
+        if (pathname === swHref) {
+          renderDevSw()
+            .then((body) => {
+              response.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+              response.setHeader('Cache-Control', 'no-store');
+              response.end(body);
+            })
+            .catch(next);
+          return;
+        }
+        next();
       });
     },
     async generateBundle(_options, bundle) {
@@ -134,7 +154,8 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: false,
+      ws: false,
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
     preview: {
@@ -146,6 +167,28 @@ export default defineConfig(({ mode }) => {
       sourcemap: process.env.TIKATRACK_SOURCEMAPS !== 'false',
       reportCompressedSize: false,
       chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/three/')) return 'three';
+            if (id.includes('/recharts/') || id.includes('/d3-') || id.includes('/victory-vendor/')) {
+              return 'recharts';
+            }
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase';
+            if (id.includes('/@vis.gl/react-google-maps/')) return 'maps';
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/react-router-dom/') ||
+              id.includes('/react-router/')
+            ) {
+              return 'react-vendor';
+            }
+            return undefined;
+          },
+        },
+      },
     },
   };
 });

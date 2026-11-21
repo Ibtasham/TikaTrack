@@ -4,12 +4,14 @@ import {
   Cloud,
   CloudOff,
   Crown,
+  Database,
   Eye,
   EyeOff,
   HardDrive,
   KeyRound,
   LogOut,
   Mail,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   UserPlus,
@@ -18,6 +20,7 @@ import {
 
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
+import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
 import type { FamilyRole } from '../types/auth';
@@ -27,15 +30,6 @@ type Mode = 'login' | 'signup' | 'reset';
 
 const ROLES: FamilyRole[] = ['owner', 'parent', 'caregiver', 'viewer'];
 
-/**
- * `/auth` — one route that is three forms when signed out and an account panel
- * when signed in.
- *
- * Signing in is genuinely optional: the whole app runs on localStorage without
- * it. That fact is stated up front rather than hidden behind a paywall-style
- * gate, because a vaccination tracker that refuses to work offline would be
- * useless exactly where connectivity is worst.
- */
 export default function AuthPage() {
   const { t, language } = useI18n();
   const isBangla = language === 'bn';
@@ -51,6 +45,7 @@ export default function AuthPage() {
     familyMembers,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
     resetPassword,
     changePassword,
@@ -62,6 +57,8 @@ export default function AuthPage() {
     deleteAccount,
   } = auth;
 
+  const { profiles, syncStatus, lastSyncedAt, syncNow } = useProfiles();
+
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,14 +66,13 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Account panel (signed-in) state.
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Family state.
   const [familyName, setFamilyName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [familyBusy, setFamilyBusy] = useState(false);
@@ -95,7 +91,6 @@ export default function AuthPage() {
     setFormError(null);
   }, [mode, email, password, confirm, fullName]);
 
-  /** Translate a known local error code; otherwise show the message verbatim. */
   const describeError = useCallback(
     (error: { code: string; message: string } | null): string | null => {
       if (!error) return null;
@@ -113,6 +108,19 @@ export default function AuthPage() {
     },
     [t],
   );
+
+  const handleGoogleSignIn = async () => {
+    setFormError(null);
+    setGoogleBusy(true);
+    const result = await signInWithGoogle();
+    setGoogleBusy(false);
+    if (result.error) {
+      setFormError(result.error.message);
+      return;
+    }
+    toast.success(t('auth.google.success'));
+    navigate('/tracker');
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -218,9 +226,6 @@ export default function AuthPage() {
     toast.success(t('auth.family.invite'));
   };
 
-  /* ===================================================================== */
-  /* Signed-out: the three forms                                            */
-  /* ===================================================================== */
   if (!user) {
     const heading =
       mode === 'login'
@@ -242,7 +247,7 @@ export default function AuthPage() {
             {cloudEnabled ? (
               <>
                 <Cloud className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden="true" />
-                {t('auth.cloudMode', backend === 'supabase' ? 'Supabase' : backend)}
+                {t('auth.cloudMode', backend === 'firebase' ? 'Firebase + Cloud SQL' : 'Supabase')}
               </>
             ) : (
               <>
@@ -258,15 +263,46 @@ export default function AuthPage() {
           <h1 className={`section-title ${isBangla ? 'font-bangla' : ''}`}>{heading}</h1>
           <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>{subheading}</p>
 
+          {/* Primary Google Sign-In Cloud Sync Card */}
+          <div className="mt-5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+            <p
+              className={`text-sm font-semibold text-emerald-950 dark:text-emerald-100 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              {t('auth.google.title')}
+            </p>
+            <p
+              className={`mt-1 text-xs leading-relaxed text-emerald-900/80 dark:text-emerald-200/80 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              {t('auth.google.subtitle')}
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleGoogleSignIn()}
+              disabled={googleBusy || loading}
+              className="btn-primary mt-3 w-full"
+            >
+              <Cloud className="h-4 w-4" aria-hidden="true" />
+              <span className={isBangla ? 'font-bangla' : undefined}>
+                {googleBusy ? t('common.status.loading') : t('auth.google.button')}
+              </span>
+            </button>
+          </div>
+
+          <div className="my-5 flex items-center gap-3 text-xs text-neutral-400 dark:text-neutral-500">
+            <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+            <span className={isBangla ? 'font-bangla' : undefined}>{t('auth.orOfflineAccount')}</span>
+            <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+          </div>
+
           {!cloudEnabled && (
             <p
-              className={`mt-4 rounded-xl bg-neutral-100 p-3 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+              className={`rounded-xl bg-neutral-100 p-3 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
             >
               {t('auth.optional.body')}
             </p>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4" noValidate>
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4" noValidate>
             {mode === 'signup' && (
               <div>
                 <label className="label" htmlFor="auth-name">
@@ -374,7 +410,7 @@ export default function AuthPage() {
               </p>
             )}
 
-            <button type="submit" className="btn-primary w-full" disabled={submitting || loading}>
+            <button type="submit" className="btn-secondary w-full" disabled={submitting || loading}>
               {submitting ? t('common.status.loading') : t(`auth.submit.${mode}`)}
             </button>
           </form>
@@ -431,10 +467,8 @@ export default function AuthPage() {
     );
   }
 
-  /* ===================================================================== */
-  /* Signed-in: account panel                                               */
-  /* ===================================================================== */
   const isOwner = family?.owner_id === user.id;
+  const isFirebase = backend === 'firebase';
 
   return (
     <div className="page-shell max-w-3xl">
@@ -447,92 +481,152 @@ export default function AuthPage() {
         </p>
       </header>
 
-      {/* Backend / storage notice */}
+      {/* Backend / storage notice + Cloud Sync control */}
       <div className="card-padded mt-6">
-        <div className="flex items-start gap-3">
-          {cloudEnabled ? (
-            <Cloud
-              className="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400"
-              aria-hidden="true"
-            />
-          ) : (
-            <CloudOff
-              className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
-              aria-hidden="true"
-            />
-          )}
-          <div>
-            <p
-              className={`font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
-            >
-              {cloudEnabled ? t('auth.cloudMode', 'Supabase') : t('auth.localMode')}
-            </p>
-            <p
-              className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
-            >
-              {cloudEnabled ? t('auth.privacy') : t('auth.localAccountNotice')}
-            </p>
-            <p
-              className={`mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
-            >
-              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
-              {user.email}
-            </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            {cloudEnabled ? (
+              <Cloud
+                className="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400"
+                aria-hidden="true"
+              />
+            ) : (
+              <CloudOff
+                className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+            )}
+            <div>
+              <p
+                className={`font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {isFirebase
+                  ? t('auth.cloudMode', 'Google Cloud Sync')
+                  : cloudEnabled
+                    ? t('auth.cloudMode', 'Supabase')
+                    : t('auth.localMode')}
+              </p>
+              <p
+                className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {cloudEnabled ? t('auth.privacy') : t('auth.localAccountNotice')}
+              </p>
+              <p
+                className={`mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                  {user.email}
+                </span>
+                <span>·</span>
+                <span className="tabular-nums">
+                  {t('auth.profilesCount', profiles.length)}
+                </span>
+                {lastSyncedAt && (
+                  <>
+                    <span>·</span>
+                    <span>
+                      {t('auth.google.syncedAt', new Date(lastSyncedAt).toLocaleTimeString())}
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
           </div>
+
+          {isFirebase && (
+            <button
+              type="button"
+              onClick={() => void syncNow()}
+              disabled={syncStatus === 'syncing'}
+              className="btn-secondary btn-sm shrink-0"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              <span className={isBangla ? 'font-bangla' : undefined}>
+                {syncStatus === 'syncing' ? t('common.status.loading') : t('auth.google.syncNow')}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Change password */}
-      <form onSubmit={handleChangePassword} className="card-padded mt-5">
-        <h2
-          className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
-        >
-          <KeyRound className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          {t('privacy.password')}
-        </h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label" htmlFor="current-password">
-              {t('auth.password')}
-            </label>
-            <input
-              id="current-password"
-              type="password"
-              className="input-field"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
+      {/* Password panel (local or Supabase accounts only) */}
+      {!isFirebase && (
+        <form onSubmit={handleChangePassword} className="card-padded mt-5">
+          <h2
+            className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+          >
+            <KeyRound className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            {t('privacy.password')}
+          </h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="current-password">
+                {t('auth.password')}
+              </label>
+              <input
+                id="current-password"
+                type="password"
+                className="input-field"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="new-password">
+                {t('privacy.newPassword')}
+              </label>
+              <input
+                id="new-password"
+                type="password"
+                className="input-field"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
           </div>
-          <div>
-            <label className="label" htmlFor="new-password">
-              {t('privacy.newPassword')}
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              className="input-field"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </div>
-        </div>
-        <button type="submit" className="btn-primary mt-4">
-          {t('common.actions.save')}
-        </button>
-      </form>
+          <button type="submit" className="btn-primary mt-4">
+            {t('common.actions.save')}
+          </button>
+        </form>
+      )}
 
-      {/* Family sharing */}
+      {/* Family cloud vault summary or Supabase multi-member sharing */}
       <section className="card-padded mt-5">
         <h2
           className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
         >
-          <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          {t('auth.family.title')}
+          {isFirebase ? (
+            <Database className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          ) : (
+            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          )}
+          {isFirebase ? t('auth.google.vaultTitle') : t('auth.family.title')}
         </h2>
 
-        {!cloudEnabled ? (
+        {isFirebase ? (
+          <div className="mt-2 space-y-3">
+            <p
+              className={`text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              {t('auth.google.vaultBody')}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link to="/tracker" className="btn-primary btn-sm">
+                <Users className="h-4 w-4" aria-hidden="true" />
+                {t('nav.tracker')}
+              </Link>
+              <Link to="/passport" className="btn-secondary btn-sm">
+                {t('nav.passport')}
+              </Link>
+            </div>
+          </div>
+        ) : !cloudEnabled ? (
           <p
             className={`mt-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
           >
@@ -662,7 +756,6 @@ export default function AuthPage() {
         )}
       </section>
 
-      {/* Sign out / delete */}
       <div className="mt-5 flex flex-wrap gap-3">
         <button type="button" className="btn-secondary" onClick={() => void handleSignOut()}>
           <LogOut className="h-4 w-4" aria-hidden="true" />

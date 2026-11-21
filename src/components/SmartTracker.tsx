@@ -26,19 +26,20 @@ import {
   HeartPulse,
   Phone,
   Stethoscope,
+  Activity,
 } from 'lucide-react';
-import { ChildGrowthChart } from './ChildGrowthChart';
+import { ChildGrowthTracker } from './ChildGrowthTracker';
 import { DoseHistory } from './DoseHistory';
 import { DoseRecorder } from './DoseRecorder';
 import { MemberActions } from './MemberActions';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import {
-  generateCatchUpPlan,
+  analyzeSchedule,
   generateFamilyTimeline,
-  generatePersonalizedSchedule,
   calculateVaccinationStats,
   milestoneDoseName,
 } from '../lib/smartScheduler';
+import { computeGrowthProgress } from '../lib/whoGrowth';
 import { createProfile } from '../lib/profileStore';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
@@ -50,7 +51,7 @@ import {
   type ReminderPreferences,
 } from '../lib/intelligentReminders';
 import { useI18n } from '../i18n';
-import { formatAge, formatDate, localiseNumber, todayISO } from '../lib/format';
+import { formatAge, formatDate, isValidISODate, localiseNumber, todayISO } from '../lib/format';
 
 type ProfileGender = NonNullable<Profile['gender']>;
 
@@ -92,6 +93,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
   );
   const [preferences, setPreferences] = useState<ReminderPreferences>(loadReminderPreferences());
   const [showPreferences, setShowPreferences] = useState(false);
+  const [showIntelligenceDetails, setShowIntelligenceDetails] = useState(false);
   const [confirmDeleteProfile, setConfirmDeleteProfile] = useState<string | null>(null);
 
   // Pre-fill state for DoseRecorder (from deep link or Next Visit Checklist)
@@ -164,32 +166,41 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
     [profiles],
   );
 
-  // Active member statistics
-  const stats = useMemo(
+  // Comprehensive evidence-driven schedule analysis for active member
+  const scheduleAnalysis = useMemo(
     () =>
       currentProfile
-        ? calculateVaccinationStats(currentProfile.dateOfBirth, currentProfile)
-        : {
-            totalScheduled: 0,
-            completed: 0,
-            upcoming: 0,
-            overdue: 0,
-            dueToday: 0,
-            progressPercentage: 0,
-            dosesRecorded: 0,
-            provisional: 0,
-            needsReview: 0,
-          },
+        ? analyzeSchedule(currentProfile.dateOfBirth, currentProfile)
+        : null,
     [currentProfile],
   );
 
+  // Active member statistics
+  const stats = scheduleAnalysis?.stats ?? {
+    totalScheduled: 0,
+    completed: 0,
+    upcoming: 0,
+    overdue: 0,
+    dueToday: 0,
+    progressPercentage: 0,
+    dosesRecorded: 0,
+    provisional: 0,
+    needsReview: 0,
+    confirmedCompleted: 0,
+    provisionalCompleted: 0,
+    dueToDateTotal: 0,
+    completedDueToDate: 0,
+    ageEligibleProgressPercentage: 100,
+    offScheduleDosesRecorded: 0,
+    uncertainRecordsCount: 0,
+    referenceDate: todayISO(),
+    timezone: 'Asia/Dhaka',
+  };
+
   // Personalized schedule & next visit bundle for the active member
   const personalizedSchedule = useMemo(
-    () =>
-      currentProfile
-        ? generatePersonalizedSchedule(currentProfile.dateOfBirth, currentProfile)
-        : [],
-    [currentProfile],
+    () => scheduleAnalysis?.scheduled ?? [],
+    [scheduleAnalysis],
   );
 
   const nextVisitBundle = useMemo(() => {
@@ -212,9 +223,13 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
   }, [personalizedSchedule]);
 
   const catchUpPlan = useMemo(
-    () =>
-      currentProfile ? generateCatchUpPlan(currentProfile.dateOfBirth, currentProfile) : [],
-    [currentProfile],
+    () => scheduleAnalysis?.catchUpPlans ?? [],
+    [scheduleAnalysis],
+  );
+
+  const growthProgress = useMemo(
+    () => computeGrowthProgress(currentProfile?.growth ?? []),
+    [currentProfile?.growth],
   );
 
   const familyTimeline = useMemo(() => generateFamilyTimeline(profiles), [profiles]);
@@ -232,9 +247,20 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
     [currentProfile, preferences],
   );
 
-  // Persist generated reminders when member or preferences change
+  // Persist generated reminders across members while preserving existing sent/acknowledged flags
   useEffect(() => {
-    if (currentProfile && preferences.enabled) {
+    if (!currentProfile || !preferences.enabled) return;
+    try {
+      const raw = localStorage.getItem('tikatrack-reminders');
+      const existing = raw ? (JSON.parse(raw) as Array<{ id: string; profileId?: string; sent?: boolean; acknowledged?: boolean }>) : [];
+      const priorById = new Map(existing.map((r) => [r.id, r]));
+      const mergedMember = memberReminders.map((rem) => {
+        const prev = priorById.get(rem.id);
+        return prev ? { ...rem, sent: Boolean(prev.sent), acknowledged: Boolean(prev.acknowledged) } : rem;
+      });
+      const otherMembers = existing.filter((r) => r.profileId !== currentProfile.id);
+      localStorage.setItem('tikatrack-reminders', JSON.stringify([...otherMembers, ...mergedMember]));
+    } catch {
       localStorage.setItem('tikatrack-reminders', JSON.stringify(memberReminders));
     }
   }, [currentProfile, memberReminders, preferences.enabled]);
@@ -275,7 +301,11 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       toast.error(t('tracker.add.error.empty-name'));
       return;
     }
-    if (!editDob || editDob > todayISO()) {
+    if (!isValidISODate(editDob)) {
+      toast.error(t('tracker.add.error.invalid-dob'));
+      return;
+    }
+    if (editDob > todayISO()) {
       toast.error(t('tracker.add.error.future-dob'));
       return;
     }
@@ -618,11 +648,17 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
 
       {/* View Mode Selector */}
       {profiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 no-print">
+        <div
+          className="flex flex-wrap gap-2 no-print"
+          role="tablist"
+          aria-label={t('tracker.title')}
+        >
           {(['overview', 'timeline', 'growth', 'reminders', 'catchup'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
+              role="tab"
+              aria-selected={viewMode === mode}
               onClick={() => setViewMode(mode)}
               className={`rounded-xl px-4 py-2 text-sm font-medium whitespace-nowrap shrink-0 transition-all cursor-pointer ${
                 viewMode === mode
@@ -871,6 +907,200 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
               </div>
             </div>
 
+            {/* Schedule Intelligence & Clinical Limitations */}
+            {scheduleAnalysis && (
+              <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-950/50">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3
+                      className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t('tracker.intelligence.title')}
+                    </h3>
+                    <p
+                      className={`mt-0.5 text-xs text-neutral-500 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t(
+                        'tracker.intelligence.subtitle',
+                        formatDate(scheduleAnalysis.referenceDate, language),
+                        scheduleAnalysis.timezone,
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowIntelligenceDetails((prev) => !prev)}
+                    aria-expanded={showIntelligenceDetails}
+                    className="btn-secondary btn-sm shrink-0 no-print"
+                  >
+                    <span className={isBangla ? 'font-bangla' : undefined}>
+                      {showIntelligenceDetails
+                        ? t('tracker.intelligence.hideDetails')
+                        : t('tracker.intelligence.toggleDetails')}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200/80 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+                  <span className={`font-medium text-neutral-700 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                    {t('tracker.intelligence.dueProgress')}:{' '}
+                    <strong className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {t(
+                        'tracker.intelligence.dueProgressRatio',
+                        localiseNumber(scheduleAnalysis.stats.completedDueToDate, language),
+                        localiseNumber(scheduleAnalysis.stats.dueToDateTotal, language),
+                      )}{' '}
+                      ({localiseNumber(scheduleAnalysis.stats.ageEligibleProgressPercentage, language)}%)
+                    </strong>
+                  </span>
+                  <span className={`tabular-nums text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                    {t(
+                      'tracker.intelligence.confirmedVsProvisional',
+                      localiseNumber(scheduleAnalysis.completedConfirmed.length, language),
+                      localiseNumber(scheduleAnalysis.completedProvisional.length, language),
+                    )}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <p className={`text-xs font-semibold text-emerald-700 dark:text-emerald-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketCompleted')}
+                    </p>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                      {localiseNumber(scheduleAnalysis.stats.completed, language)}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t(
+                        'tracker.intelligence.bucketCompletedDetail',
+                        localiseNumber(scheduleAnalysis.completedConfirmed.length, language),
+                        localiseNumber(scheduleAnalysis.completedProvisional.length, language),
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <p className={`text-xs font-semibold text-sky-700 dark:text-sky-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketUpcoming')}
+                    </p>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                      {localiseNumber(
+                        scheduleAnalysis.dueToday.length + scheduleAnalysis.upcoming.length,
+                        language,
+                      )}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t(
+                        'tracker.intelligence.bucketUpcomingDetail',
+                        localiseNumber(scheduleAnalysis.dueToday.length, language),
+                        localiseNumber(scheduleAnalysis.upcoming.length, language),
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <p className={`text-xs font-semibold text-red-700 dark:text-red-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketOverdue')}
+                    </p>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                      {localiseNumber(scheduleAnalysis.potentiallyOverdue.length, language)}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketOverdueDetail')}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <p className={`text-xs font-semibold text-amber-700 dark:text-amber-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketUncertain')}
+                    </p>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                      {localiseNumber(scheduleAnalysis.anomalies.length, language)}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t(
+                        'tracker.intelligence.bucketUncertainDetail',
+                        localiseNumber(scheduleAnalysis.anomalies.length, language),
+                        localiseNumber(scheduleAnalysis.offScheduleEvents.length, language),
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <p className={`text-xs font-semibold text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t('tracker.intelligence.bucketHcw')}
+                    </p>
+                    <p className="mt-1 text-lg font-bold tabular-nums text-neutral-900 dark:text-white">
+                      {localiseNumber(scheduleAnalysis.hcwReviewItems.length, language)}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                      {t(
+                        'tracker.intelligence.bucketHcwDetail',
+                        localiseNumber(scheduleAnalysis.hcwReviewItems.length, language),
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {showIntelligenceDetails && (
+                  <div className="mt-4 space-y-4 border-t border-neutral-200 pt-4 text-xs dark:border-neutral-800">
+                    {scheduleAnalysis.anomalies.length === 0 &&
+                    scheduleAnalysis.hcwReviewItems.length === 0 ? (
+                      <p className={`text-emerald-700 dark:text-emerald-300 ${isBangla ? 'font-bangla' : ''}`}>
+                        {t('tracker.intelligence.noIssues')}
+                      </p>
+                    ) : null}
+
+                    {scheduleAnalysis.anomalies.length > 0 && (
+                      <div>
+                        <p className={`mb-1.5 font-semibold text-amber-800 dark:text-amber-300 ${isBangla ? 'font-bangla' : ''}`}>
+                          {t('tracker.intelligence.anomalyListTitle')}
+                        </p>
+                        <ul className="space-y-1 text-neutral-700 dark:text-neutral-300">
+                          {scheduleAnalysis.anomalies.map((item) => (
+                            <li key={item.id} className={isBangla ? 'font-bangla' : undefined}>
+                              • {item.description[language]}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {scheduleAnalysis.hcwReviewItems.length > 0 && (
+                      <div>
+                        <p className={`mb-1.5 font-semibold text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                          {t('tracker.intelligence.hcwListTitle')}
+                        </p>
+                        <ul className="space-y-1 text-neutral-700 dark:text-neutral-300">
+                          {scheduleAnalysis.hcwReviewItems.map((item) => (
+                            <li key={item.id} className={isBangla ? 'font-bangla' : undefined}>
+                              • {item.summary[language]} ({item.conflictIds.join(', ')})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className={`mb-1.5 font-semibold text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+                        {t('tracker.intelligence.limitationsTitle')}
+                      </p>
+                      <ul className="space-y-1.5 text-neutral-600 dark:text-neutral-300">
+                        {scheduleAnalysis.limitations.map((lim) => (
+                          <li key={lim.id} className={isBangla ? 'font-bangla' : undefined}>
+                            <strong className="text-neutral-800 dark:text-neutral-100">
+                              {lim.title[language]}:
+                            </strong>{' '}
+                            {lim.description[language]}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Next EPI Visit Checklist */}
             <div className="mt-6 border-t border-neutral-200 pt-6 dark:border-neutral-800">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -978,9 +1208,9 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   {language === 'en' ? 'Achievements' : 'অর্জন'}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {getAchievements(currentProfile).map((achievement, idx) => (
+                  {getAchievements(currentProfile).map((achievement) => (
                     <div
-                      key={idx}
+                      key={`${achievement.icon}-${achievement.title}`}
                       className="flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-100 to-yellow-100 px-4 py-2 text-sm font-semibold text-amber-900 dark:from-amber-950/60 dark:to-yellow-950/50 dark:text-amber-200"
                     >
                       <span>{achievement.icon}</span>
@@ -990,6 +1220,56 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Child Growth Tracker quick summary card */}
+          <div className="card-padded no-print">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h3
+                  className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  <Activity className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  {t('growth.quickCard.title')}
+                </h3>
+                {growthProgress.checkupCount === 0 ? (
+                  <p className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
+                    {t('growth.quickCard.empty')}
+                  </p>
+                ) : (
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-700 tabular-nums dark:text-neutral-200">
+                    {growthProgress.latestWeightKg !== undefined && (
+                      <span>
+                        <strong className="font-semibold text-neutral-900 dark:text-white">
+                          {localiseNumber(growthProgress.latestWeightKg, language)} {isBangla ? 'কেজি' : 'kg'}
+                        </strong>
+                      </span>
+                    )}
+                    {growthProgress.latestWeightKg !== undefined && growthProgress.latestHeightCm !== undefined && (
+                      <span aria-hidden="true" className="text-neutral-400">·</span>
+                    )}
+                    {growthProgress.latestHeightCm !== undefined && (
+                      <span>
+                        <strong className="font-semibold text-neutral-900 dark:text-white">
+                          {localiseNumber(growthProgress.latestHeightCm, language)} {isBangla ? 'সেমি' : 'cm'}
+                        </strong>
+                      </span>
+                    )}
+                    <span aria-hidden="true" className="text-neutral-400">·</span>
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      {t('growth.summary.checkups', localiseNumber(growthProgress.checkupCount, language))}
+                    </span>
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('growth')}
+                className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+              >
+                <span className={isBangla ? 'font-bangla' : undefined}>{t('growth.quickCard.open')}</span>
+              </button>
+            </div>
           </div>
 
           {/* Every dose this member has, with correction and deletion. */}
@@ -1143,7 +1423,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       )}
 
       {/* Growth & WHO View */}
-      {viewMode === 'growth' && currentProfile && <ChildGrowthChart profile={currentProfile} />}
+      {viewMode === 'growth' && currentProfile && <ChildGrowthTracker profile={currentProfile} />}
 
       {/* Reminders View */}
       {viewMode === 'reminders' && currentProfile && (
@@ -1295,8 +1575,15 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     <p
                       className={`text-xs text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                     >
-                      {t('tracker.catchUp.noInterval')}
+                      {t('tracker.catchUp.noInterval')} ({plan.conflictIds.join(', ')})
                     </p>
+                    {plan.olderAgeCaveat && (
+                      <p
+                        className={`mt-1 text-xs font-medium text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                      >
+                        {t('tracker.catchUp.olderAgeNote')}
+                      </p>
+                    )}
                     {plan.requiresReview && (
                       <p
                         className={`mt-2 flex items-start gap-2 text-xs font-medium text-amber-800 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}

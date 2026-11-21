@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '../App';
@@ -71,13 +72,15 @@ describe('CentresPage map integration & fallback behaviour', () => {
 
   function renderCentresPage() {
     return render(
-      <ThemeProvider>
-        <I18nProvider>
-          <ToastProvider>
-            <CentresPage />
-          </ToastProvider>
-        </I18nProvider>
-      </ThemeProvider>,
+      <MemoryRouter>
+        <ThemeProvider>
+          <I18nProvider>
+            <ToastProvider>
+              <CentresPage />
+            </ToastProvider>
+          </I18nProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
     );
   }
 

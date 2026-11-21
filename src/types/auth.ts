@@ -35,7 +35,7 @@ export interface FamilyMember {
 }
 
 /** Where the current session lives. */
-export type AuthBackend = 'local' | 'supabase';
+export type AuthBackend = 'local' | 'supabase' | 'firebase';
 
 export interface AuthError {
   code: string;

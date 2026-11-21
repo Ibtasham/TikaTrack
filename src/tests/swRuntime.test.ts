@@ -270,10 +270,10 @@ describe('service worker: install', () => {
     expect(await harness.storage.keys()).toEqual(['tikatrack-vTEST']);
   });
 
-  it('takes over from the previous worker once the shell is cached', async () => {
+  it('waits after caching the shell so active user sessions are not interrupted', async () => {
     const harness = createHarness();
     await harness.fire('install');
-    expect(harness.skipWaiting).toHaveBeenCalledTimes(1);
+    expect(harness.skipWaiting).not.toHaveBeenCalled();
   });
 
   it('aborts the install when the SPA shell itself cannot be cached', async () => {
@@ -293,7 +293,7 @@ describe('service worker: install', () => {
     });
     await harness.fire('install');
 
-    expect(harness.skipWaiting).toHaveBeenCalledTimes(1);
+    expect(harness.skipWaiting).not.toHaveBeenCalled();
     expect(harness.warnings.flat().join(' ')).toContain('/icons/missing.png');
   });
 });
@@ -316,7 +316,8 @@ describe('service worker: messages', () => {
   it('skips waiting when the page asks for the update', async () => {
     const harness = createHarness();
     await harness.fire('message', { data: 'SKIP_WAITING' });
-    expect(harness.skipWaiting).toHaveBeenCalledTimes(1);
+    await harness.fire('message', { data: { type: 'SKIP_WAITING' } });
+    expect(harness.skipWaiting).toHaveBeenCalledTimes(2);
   });
 
   it('ignores unrelated messages', async () => {

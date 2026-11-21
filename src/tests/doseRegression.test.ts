@@ -130,10 +130,10 @@ describe('regression 1: recording OPV dose 1 does not complete OPV 2 and 3', () 
   it('reports the remaining doses as outstanding everywhere else too', () => {
     const stats = calculateVaccinationStats(profile.dateOfBirth, profile);
     expect(stats.completed).toBe(1);
-    expect(stats.overdue).toBe(13);
-    expect(stats.progressPercentage).toBe(7);
+    expect(stats.overdue).toBe(15);
+    expect(stats.progressPercentage).toBe(6);
 
-    expect(getOverdueVaccinations(profile.dateOfBirth, profile)).toHaveLength(13);
+    expect(getOverdueVaccinations(profile.dateOfBirth, profile)).toHaveLength(15);
 
     const catchUp = generateCatchUpPlan(profile.dateOfBirth, profile).find(
       (plan) => plan.vaccineId === 'opv',

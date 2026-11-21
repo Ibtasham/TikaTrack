@@ -8,13 +8,14 @@ import type { TranslationDictionary } from '../types';
 
 export const bn: TranslationDictionary = {
   'reminders.title': 'রিমাইন্ডার',
-  'reminders.subtitle': 'প্রতিটি আসন্ন ডোজের জন্য ব্রাউজার নোটিফিকেশন ও ছাপার যোগ্য চেকলিস্ট',
+  'reminders.subtitle':
+    'প্রতিটি আসন্ন ডোজের জন্য ৪৮ ঘণ্টার ওয়েব পুশ অ্যালার্ট, ব্রাউজার নোটিফিকেশন ও ছাপার যোগ্য চেকলিস্ট',
   'reminders.empty.title': 'এখনো কোনো রিমাইন্ডার নেই',
   'reminders.empty.body':
     'প্রতিটি প্রোফাইলের জন্মতারিখ থেকে রিমাইন্ডার তৈরি হয়। আগে একটি প্রোফাইল যোগ করুন।',
   'reminders.permission.title': 'ব্রাউজার নোটিফিকেশন চালু করুন',
   'reminders.permission.body':
-    'টিকাট্র্যাক আপনার ব্রাউজারের কাছে অনুমতি চায় — নোটিফিকেশন এই ডিভাইস ছেড়ে যায় না।',
+    'এই ডিভাইসে প্রতিটি টিকার ৪৮ ঘণ্টা আগে স্বয়ংক্রিয় ওয়েব পুশ এবং অ্যাপ রিমাইন্ডার পেতে অনুমতি দিন।',
   'reminders.permission.grant': 'নোটিফিকেশন অনুমতি দিন',
   'reminders.permission.granted': 'নোটিফিকেশন চালু আছে',
   'reminders.permission.denied': 'ব্রাউজার সেটিংসে নোটিফিকেশন বন্ধ আছে',
@@ -43,7 +44,7 @@ export const bn: TranslationDictionary = {
   'reminders.print': 'চেকলিস্ট প্রিন্ট করুন',
   'reminders.howItWorks.title': 'রিমাইন্ডার কীভাবে কাজ করে',
   'reminders.howItWorks.body':
-    'টিকাট্র্যাক প্রতিটি সদস্যের সূচি থেকে রিমাইন্ডার তৈরি করে এই ব্রাউজারে রাখে। নোটিফিকেশনের অনুমতি দিলে অ্যাপ খোলা থাকার সময় বকেয়া রিমাইন্ডার দেখানো হয় — অ্যাপ বন্ধ থাকলে কিছু নির্ধারিত হয় না।',
+    'টিকাট্র্যাক প্রতিটি সদস্যের সূচি থেকে রিমাইন্ডার তৈরি করে। ৪৮ ঘণ্টার ওয়েব পুশ চালু করলে আপনার আসন্ন সময়সূচি আমাদের VAPID পুশ সার্ভিসের সাথে সিঙ্ক থাকে এবং ট্যাব বন্ধ থাকলেও প্রতিটি নির্ধারিত তারিখের ৪৮ ঘণ্টা আগে নোটিফিকেশন পাঠায়।',
   'reminders.permission.hint':
     'নোটিফিকেশন ঐচ্ছিক। অনুমতি না দিলেও এই পেজে বকেয়া রিমাইন্ডার দেখানো হবে।',
   'reminders.refresh': 'রিমাইন্ডার নতুন করে হিসাব করুন',
@@ -68,4 +69,24 @@ export const bn: TranslationDictionary = {
   'reminders.calendar.body': '{0}টি রিমাইন্ডার অ্যালার্মসহ যোগ হয়েছে',
   'reminders.filter.member': 'সদস্য অনুযায়ী ফিল্টার',
   'reminders.filter.allMembers': 'পরিবারের সবাই',
+  'reminders.push.title': '৪৮ ঘণ্টার ওয়েব পুশ রিমাইন্ডার',
+  'reminders.push.body':
+    'টিকাট্র্যাক বন্ধ থাকলেও প্রতিটি আসন্ন টিকার নির্ধারিত তারিখের ৪৮ ঘণ্টা আগে স্বয়ংক্রিয় ব্রাউজার পুশ অ্যালার্ট পান।',
+  'reminders.push.enable': '৪৮ ঘণ্টার পুশ চালু করুন',
+  'reminders.push.enabling': 'চালু হচ্ছে…',
+  'reminders.push.active': 'সক্রিয় — ৪৮ ঘণ্টা আগে পুশ রিমাইন্ডার চালু আছে',
+  'reminders.push.queued': '{0}টি আসন্ন ডোজ ৪৮ ঘণ্টার অ্যালার্টের জন্য যুক্ত আছে',
+  'reminders.push.within48h': '{0}টি ডোজ আগামী ৪৮ ঘণ্টার মধ্যে নির্ধারিত',
+  'reminders.push.test': '৪৮ ঘণ্টার টেস্ট পুশ পাঠান',
+  'reminders.push.sync': 'সময়সূচি সিঙ্ক করুন',
+  'reminders.push.disable': 'পুশ বন্ধ করুন',
+  'reminders.push.unsupported': 'এই ব্রাউজারে ওয়েব পুশ সমর্থিত নয়।',
+  'reminders.push.subscribedToast': '৪৮ ঘণ্টার ওয়েব পুশ চালু হয়েছে',
+  'reminders.push.syncedToast': '৪৮ ঘণ্টার অ্যালার্টের জন্য সূচি সিঙ্ক হয়েছে',
+  'reminders.push.testSent': 'টেস্ট ওয়েব পুশ পাঠানো হয়েছে',
+  'reminders.push.testBody':
+    '৪৮ ঘণ্টার টিকা রিমাইন্ডার প্রিভিউ দেখতে আপনার সিস্টেম নোটিফিকেশন দেখুন।',
+  'reminders.push.disabledToast': 'এই ডিভাইসে ওয়েব পুশ বন্ধ করা হয়েছে',
+  'reminders.push.error': 'ওয়েব পুশ সাবস্ক্রিপশন আপডেট করা যায়নি',
+  'reminders.lead.hours48': '২ দিন (৪৮ ঘণ্টা)',
 };

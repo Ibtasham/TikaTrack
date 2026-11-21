@@ -47,4 +47,6 @@ export const bn: TranslationDictionary = {
   'analytics.lastDose': 'সর্বশেষ সংরক্ষিত ডোজ',
   'analytics.nextMilestone': 'পরবর্তী ধাপ',
   'analytics.days': '{0} দিন',
+  'analytics.scope.member': '{0}-এর পরিসংখ্যান দেখানো হচ্ছে',
+  'analytics.scope.family': 'পরিবারের মোট {0} সদস্যের সম্মিলিত পরিসংখ্যান',
 };

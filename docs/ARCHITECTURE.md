@@ -6,10 +6,10 @@ deployment see [`DEPLOYMENT.md`](DEPLOYMENT.md); for translations see
 
 ## Guiding principles
 
-1. **Offline-first, local by default.** The app must be 100% functional with no
-   network, no backend and no account. Cloud sync is an _optional_ enhancement
-   that switches on only when Supabase credentials are present. Nothing in the
-   default path makes a network request.
+1. **Offline-first, local by default.** The core clinical schedule, dose ledger,
+   passports, and offline BM25 assistant must work with no network and no account.
+   Cloud sync (Firebase Firestore, Cloud SQL PostgreSQL via Express, or optional
+   Supabase) and Gemini AI/Push features layer on cleanly when configured.
 2. **Pure core, thin UI.** Everything that can be a pure function lives in
    `src/lib/` and `src/data/` with no React and no hidden I/O. Pages and
    components compose that core with React state and contexts. This is what makes
@@ -37,8 +37,8 @@ main.tsx
         <ThemeProvider>           # light/dark/system, persisted, pre-paint applied
           <I18nProvider>          # language + t(), persisted
             <ToastProvider>       # transient notifications
-              <AuthProvider>      # local-first auth; Supabase when configured
-                <ProfilesProvider># family members + dose records (localStorage)
+              <AuthProvider>      # Firebase Auth + local-first auth; optional Supabase
+                <ProfilesProvider># family members + dose records (local + cloud sync)
                   <Suspense><AppRoutes/></Suspense>
                   <ToastViewport/>
 ```
@@ -82,12 +82,12 @@ Two details make URLs work on a plain static host:
   bar _before_ React Router reads it. On hosts that do rewrite, none of this
   fires. `src/tests/spaRedirect.test.ts` covers the resolution rules.
 
-Routes that pull in a heavy dependency (`recharts` on **/analytics**) or are
+Routes that pull in a heavy dependency (`recharts` on **/analytics** & **/growth**,
+`three` on **/cold-chain**, `@vis.gl/react-google-maps` on **/centres**) or are
 visited less often (**/reminders**, **/compare**, **/passport**) are
-`React.lazy`-loaded with a `PageSkeleton` fallback. Everything else is in the
-main chunk so the first navigation is instant — an offline user should never wait
-on a chunk that was never cached. Vite `manualChunks` further splits `react`,
-`recharts` and `lucide-react` into their own vendor chunks.
+`React.lazy`-loaded with a `PageSkeleton` fallback. Vite `manualChunks` splits
+`react-vendor`, `recharts`, `three`, `firebase`, and `maps` into dedicated
+vendor chunks.
 
 | Route           | Page              | Notes                             |
 | --------------- | ----------------- | --------------------------------- |
@@ -119,14 +119,9 @@ on a chunk that was never cached. Vite `manualChunks` further splits `react`,
   administrations** (`profile.events`), not in a per-vaccine map — see
   [Spotlight: the dose ledger](#spotlight-the-dose-ledger).
 - **Theme / Language** (`ThemeContext`, `I18nProvider`): persisted preferences.
-- **Auth** (`AuthContext` + `lib/localAuth` / `lib/supabase`): in local mode,
-  accounts are created on-device with a salted password hash (never sent
-  anywhere); in cloud mode the same interface delegates to Supabase. The context
-  exposes `cloudEnabled` / `backend` so the UI can label the mode honestly.
-- **Reminders** (`lib/intelligentReminders`): _derived_ from profiles on demand
-  and cached in `localStorage`. Because they are regenerated from the schedule,
-  recording a dose clears the matching reminder instead of leaving it to nag.
-- **Passports** (`lib/digitalPassport`): issued certificates stored locally.
+- **Auth & Cloud Sync** (`AuthContext` + `services/cloudSync` + `lib/localAuth` / `lib/firebase` / `lib/supabase`): in local mode, accounts are created on-device using salted PBKDF2-SHA256 (`100,000` iterations when Web Crypto is available); when signed in with Firebase Auth, profiles sync to Firestore (`users/{uid}/familyProfiles/*`) and optionally Cloud SQL PostgreSQL (`src/db/` via `server.ts`) using deletion-tombstone-aware `mergeCloudAndLocalProfiles`.
+- **Reminders & Web Push** (`lib/intelligentReminders` + `lib/pushClient` + `lib/webPushServer`): derived from profiles on demand, cached locally, and optionally synced to the Express VAPID Web Push scheduler for 48-hour advance alerts.
+- **Passports** (`lib/digitalPassport` + `lib/passportExport`): issued certificates supporting both device-bound HMAC (`TIKAPASS2`) and cross-device verifiable ECDSA P-256 (`TIKAPASS3`), plus SVG/PDF/PNG card exports.
 
 All keys are `tikatrack.`-prefixed (`lib/storage`), which also powers the
 "estimate storage" and "erase all local data" controls on the Privacy page.
@@ -145,10 +140,14 @@ All keys are `tikatrack.`-prefixed (`lib/storage`), which also powers the
 | `intelligentReminders` | Reminder generation, quiet hours, notifications, statistics           |
 | `ragEngine`            | Offline BM25 retrieval + answer synthesis over the bundled corpus     |
 | `qr`                   | Byte-mode QR encoder (v1–12, ECC-M), no dependencies                  |
-| `digitalPassport`      | Device-signed QR certificate + verifier                               |
-| `localAuth`            | On-device accounts, password strength, hashing                        |
+| `digitalPassport`      | Device HMAC (`TIKAPASS2`) & portable ECDSA P-256 (`TIKAPASS3`) QR certificates |
+| `localAuth`            | On-device accounts, password strength, PBKDF2-SHA256 hashing          |
 | `sha256`               | Portable SHA-256 for contexts where SubtleCrypto is absent            |
-| `supabase`             | Optional cloud client; inert unless configured                        |
+| `firebase`             | Firebase Auth + Firestore SDK initialization and error handlers       |
+| `supabase`             | Optional Supabase client; inert unless configured                     |
+| `webPushServer`        | Server-side VAPID push scheduling, SSRF validation, 48h dedupe        |
+| `lifespanStatus`       | Multi-dose milestone isolation for lifespan tracker status            |
+| `whoGrowth`            | WHO 0–60m percentiles + WHO 2007 5–19y BMI-for-age assessment         |
 | `exporters`            | JSON/CSV download, print, clipboard                                   |
 | `storage`              | Key registry, usage estimate, safe erase                              |
 | `spaRedirect`          | Turns a static host's `404.html` bounce back into a real route        |
@@ -161,13 +160,7 @@ All keys are `tikatrack.`-prefixed (`lib/storage`), which also powers the
 | `onboarding`           | First-run tour: whether to show it, dismissal, step clamping          |
 | `version`              | `APP_VERSION` read from `package.json` (never drifts)                 |
 
-`src/data/evidence/` is the knowledge base that sits beside the pure core: 9
-structured vaccine records, 35 registered sources, 8 open conflicts and a bridge
-that classifies all 52 legacy catalogue ids. Every clinical claim carries its
-evidence, and `npm run evidence:report` regenerates `docs/EVIDENCE-REVIEW.md`
-from the data — CI fails if the committed report drifts. Nothing in it is
-invented: where no authoritative document exists, the field says so
-(`requires-professional-review`) instead of holding a plausible number.
+`src/data/evidence/` is the knowledge base alongside the pure core, including structured vaccine records, registered sources, conflict disclosures, and a bridge indexing all catalog entries. Every clinical claim carries its source and review status (`src/data/evidence/bridge.ts`).
 
 ### Rule: calendar dates are local, never UTC
 
@@ -324,14 +317,7 @@ See [`LOCALISATION.md`](LOCALISATION.md) for opting into a self-hosted font.
   against a _populated_ device, because the calendar export, sharing, the
   printable card and the record-aware assistant only exist once there is data.
 
-**Coverage is a gate, not a report.** `npm run test:coverage` enforces thresholds
-(90% statements, 90% lines, 90% functions, 82% branches) over `lib/`, `data/`,
-`hooks/` and `i18n/`; at 3.0.0-alpha.2 the suite — 33 files, 809 tests — sits at
-92.2% / 93.6% / 92.9% / 85.3%. The thresholds were ratcheted up from 60/60/55
-once the pure core was covered, and again to 90/90/82 when Vitest 4 started
-instrumenting more branches, so new untested code fails CI instead of quietly
-eroding the number.
-
-`npm run validate` runs typecheck → lint → format:check → evidence:report →
-test:coverage → build; CI runs the same gate on Node 20 and 22, then re-runs the
-suite under `TZ=Asia/Dhaka`.
+CI runs TypeScript typecheck (`npm run lint`), ESLint (`npm run eslint`),
+Firestore rules linting (`npx eslint -c eslint.rules.config.mjs firestore.rules`),
+the Vitest suite (`npm run test:run` in both UTC and `TZ=Asia/Dhaka`), and the
+production Vite build (`npm run build`).

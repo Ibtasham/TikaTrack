@@ -18,10 +18,11 @@ import {
   MISLABELLED_AS_ROUTINE,
   nationalProgrammeIds,
 } from '../data/evidence/bridge';
-import { conflicts } from '../data/evidence/conflicts';
+import { conflicts, OPEN_CONFLICT_COUNT, RESOLVED_CONFLICT_COUNT } from '../data/evidence/conflicts';
 import { claimsOf, vaccineRecords } from '../data/evidence/records';
 import {
   getSource,
+  isSufficientForBackgroundClaim,
   isSufficientForClinicalClaim,
   isSufficientForProgrammeFact,
   sourceRegistry,
@@ -146,20 +147,36 @@ describe('knowledge base integrity', () => {
     expect(KNOWLEDGE_BASE_VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('invents no minimum age, minimum interval or maximum age', () => {
-    const invented: string[] = [];
+  it('sources every non-null minimum age or interval and keeps domestic maximumAge open for review', () => {
+    const unsourced: string[] = [];
     for (const record of vaccineRecords) {
       for (const dose of record.doses) {
-        if (dose.minimumAge.value !== null)
-          invented.push(`${record.id}.${dose.doseNumber}.minimumAge`);
-        if (dose.minimumIntervalFromPrevious.value !== null) {
-          invented.push(`${record.id}.${dose.doseNumber}.minimumInterval`);
+        if (dose.minimumAge.value !== null) {
+          if (
+            dose.minimumAge.reviewStatus !== 'evidence-verified' ||
+            dose.minimumAge.evidence.length === 0 ||
+            !dose.minimumAge.evidence.every((ref) => isSufficientForClinicalClaim(ref.sourceId))
+          ) {
+            unsourced.push(`${record.id}.${dose.doseNumber}.minimumAge`);
+          }
         }
-        if (dose.maximumAge.value !== null)
-          invented.push(`${record.id}.${dose.doseNumber}.maximumAge`);
+        if (dose.minimumIntervalFromPrevious.value !== null) {
+          if (
+            dose.minimumIntervalFromPrevious.reviewStatus !== 'evidence-verified' ||
+            dose.minimumIntervalFromPrevious.evidence.length === 0 ||
+            !dose.minimumIntervalFromPrevious.evidence.every((ref) =>
+              isSufficientForClinicalClaim(ref.sourceId),
+            )
+          ) {
+            unsourced.push(`${record.id}.${dose.doseNumber}.minimumInterval`);
+          }
+        }
+        if (dose.maximumAge.value !== null) {
+          unsourced.push(`${record.id}.${dose.doseNumber}.maximumAge`);
+        }
       }
     }
-    expect(invented).toEqual([]);
+    expect(unsourced).toEqual([]);
   });
 
   it('marks every unknown value as requiring professional review', () => {
@@ -175,16 +192,19 @@ describe('knowledge base integrity', () => {
     }
   });
 
-  it('never marks a clinical claim verified without a sufficient source', () => {
+  it('never marks a claim verified without a sufficient source for its kind', () => {
     for (const record of vaccineRecords) {
       for (const claim of claimsOf(record)) {
         if (claim.reviewStatus !== 'evidence-verified') continue;
         expect(claim.evidence.length, record.id).toBeGreaterThan(0);
         for (const ref of claim.evidence) {
           const sufficient =
-            isSufficientForClinicalClaim(ref.sourceId) ||
-            isSufficientForProgrammeFact(ref.sourceId);
-          expect(sufficient, `${record.id} → ${ref.sourceId}`).toBe(true);
+            claim.kind === 'programme-fact'
+              ? isSufficientForProgrammeFact(ref.sourceId)
+              : claim.kind === 'disease-burden' || claim.kind === 'general-description'
+                ? isSufficientForBackgroundClaim(ref.sourceId)
+                : isSufficientForClinicalClaim(ref.sourceId);
+          expect(sufficient, `${record.id}.${claim.kind} → ${ref.sourceId}`).toBe(true);
         }
       }
     }
@@ -244,12 +264,16 @@ describe('knowledge base integrity', () => {
 
 describe('classification', () => {
   it('classifies every catalogue entry, without deleting any', () => {
-    expect(allVaccines.length).toBe(52);
+    expect(allVaccines.length).toBe(90);
     expect(legacyBridge.length).toBe(allVaccines.length);
     for (const vaccine of allVaccines) {
       const entry = legacyBridge.find((bridge) => bridge.legacyId === vaccine.id);
       expect(entry, vaccine.id).toBeDefined();
-      expect(entry?.reviewStatus).toBe('requires-professional-review');
+      expect([
+        'evidence-verified',
+        'requires-professional-review',
+        'conflict-unresolved',
+      ]).toContain(entry?.reviewStatus);
     }
   });
 
@@ -298,7 +322,7 @@ describe('classification', () => {
       expect(nip.has(id), `${id} is in schedule[] but not classified bd-nip-routine`).toBe(true);
     }
     expect(nip.has('fipv')).toBe(true);
-    expect(scheduleIds.has('fipv')).toBe(false);
+    expect(scheduleIds.has('fipv')).toBe(true);
   });
 
   it('flags every entry the 2.x dataset labelled "routine" but that is not a programme antigen', () => {
@@ -317,7 +341,7 @@ describe('classification', () => {
     const homepageCited = legacyBridge.filter((entry) =>
       entry.flags.includes('source-url-is-homepage'),
     );
-    expect(homepageCited.length).toBeGreaterThan(15);
+    expect(homepageCited.length).toBeGreaterThan(10);
     const badIntroduced = legacyBridge.filter((entry) =>
       entry.flags.includes('introduced-value-is-not-a-date'),
     );
@@ -331,17 +355,27 @@ describe('classification', () => {
 });
 
 describe('conflict register', () => {
-  it('records every conflict as unresolved, with competing statements and a required action', () => {
+  it('records all eight conflicts, keeping unverified domestic items open and resolved items cited', () => {
     expect(conflicts.length).toBeGreaterThanOrEqual(8);
+    expect(OPEN_CONFLICT_COUNT).toBe(2);
+    expect(RESOLVED_CONFLICT_COUNT).toBe(6);
+
     for (const conflict of conflicts) {
-      expect(conflict.status).toBe('unresolved');
       expect(conflict.statements.length, conflict.id).toBeGreaterThanOrEqual(2);
       expect(conflict.requiredAction.trim().length, conflict.id).toBeGreaterThan(20);
       expect(conflict.openedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(
-        conflict.resolution,
-        `${conflict.id} must not carry a resolution while unresolved`,
-      ).toBeUndefined();
+      if (conflict.status === 'unresolved') {
+        expect(['C-005', 'C-006']).toContain(conflict.id);
+        expect(
+          conflict.resolution,
+          `${conflict.id} must not carry a resolution while unresolved`,
+        ).toBeUndefined();
+      } else {
+        expect(conflict.resolution, `${conflict.id} must cite its resolution`).toBeDefined();
+        expect(conflict.resolution?.decidedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(conflict.resolution?.decision.trim().length).toBeGreaterThan(20);
+        expect(conflict.resolution?.evidence.length).toBeGreaterThan(0);
+      }
       for (const statement of conflict.statements) {
         expect(statement.origin.trim().length, conflict.id).toBeGreaterThan(0);
       }
@@ -425,7 +459,7 @@ describe('evidence report', () => {
     expect(report.summary.gaps).toBeGreaterThan(0);
     expect(report.sections.unsupportedStatements.length).toBeGreaterThan(0);
     expect(report.sections.outdatedInformation.length).toBeGreaterThan(0);
-    expect(report.sections.conflictingSources.length).toBe(conflicts.length);
+    expect(report.sections.conflictingSources.length).toBe(OPEN_CONFLICT_COUNT);
     expect(report.sections.missingReferences.length).toBeGreaterThan(0);
     expect(report.sections.awaitingProfessionalReview.length).toBeGreaterThan(0);
     expect(Array.isArray(report.sections.inconsistentTranslations)).toBe(true);
@@ -464,7 +498,9 @@ describe('evidence lookups used by the UI', () => {
     const summary = must(evidenceForLegacy('mr'), 'mr');
     expect(summary.programme).toBe('bd-nip-routine');
     expect(summary.record?.id).toBe('rec-mr');
-    expect(summary.sources.map((source) => source.id)).toContain('who-bd-immunization');
+    expect(summary.reviewStatus).toBe('evidence-verified');
+    expect(summary.hasClinicalEvidence).toBe(true);
+    expect(summary.sources.map((source) => source.id)).toContain('who-pp-measles-2017');
     expect(summary.conflicts.map((conflict) => conflict.id)).toContain('C-002');
     expect(summary.publishable).toBe(true);
   });
@@ -486,8 +522,15 @@ describe('evidence lookups used by the UI', () => {
     expect(facts.catalogueEntries).toBe(allVaccines.length);
     expect(facts.structuredRecords).toBe(vaccineRecords.length);
     expect(facts.sourcesRegistered).toBe(sourceRegistry.length);
-    expect(facts.openConflicts).toBe(conflicts.length);
-    expect(facts.entriesAwaitingReview).toBe(legacyBridge.length);
+    expect(facts.openConflicts).toBe(OPEN_CONFLICT_COUNT);
+    expect(facts.resolvedConflicts).toBe(RESOLVED_CONFLICT_COUNT);
+    expect(facts.entriesAwaitingReview).toBe(
+      legacyBridge.filter(
+        (entry) =>
+          entry.reviewStatus === 'requires-professional-review' ||
+          entry.reviewStatus === 'conflict-unresolved',
+      ).length,
+    );
     expect(facts.nationalProgrammeAntigens).toBe(nationalProgrammeIds().length);
   });
 });

@@ -15,6 +15,35 @@ map is kept as a derived projection rather than deleted.
 
 ---
 
+## 3.1.0 — 2026-11-21 (schema 3.0.0)
+
+Major evidence upgrade turning TikaTrack's source registry, conflict register, structured vaccine records, and schedule engine into a rigorously cited Bangladesh immunization knowledge base.
+
+### Resolved conflicts (6 of 8: C-001, C-002, C-003, C-004, C-007, C-008)
+
+- **C-001 (`resolved-with-source`) — fIPV routine schedule integration:** Added `fIPV-1` (`6 Weeks` / `42d`) and `fIPV-2` (`14 Weeks` / `98d`) to `src/data/vaccines.ts` `schedule[]` (expanding `MILESTONE_DOSES` from 14 to 16 rows) and aligned `rec-fipv` citations to WHO Bangladesh (`who-bd-immunization`, 2017 fIPV introduction) and the June 2022 WHO Polio Position Paper (`who-pp-polio-2022`). Bangladesh-specific catch-up upper age cutoffs remain under C-005.
+- **C-002 (`resolved-with-source`) — Calendar-month due-date arithmetic:** Added `ageMonths` (`9` and `15`) to month-based `schedule[]` entries and `MilestoneDose`, implemented `addCalendarMonths()` in `src/lib/format.ts`, and updated `smartScheduler.ts` (`calculateScheduledDate`, `generatePersonalizedSchedule`, `generateCatchUpPlan`, `generateVaccineExplanation`) to compute exact calendar-month dates for MR-1 (`9m`), MR-2 (`15m`), and TCV (`15m`) citing WHO Measles (2017) & Typhoid (Aug 2026) Position Papers.
+- **C-003 (`resolved-with-source`) — HPV & Rotavirus programme separation:** Updated `hpv` to `doses: 1` (single-dose school/community campaign for girls aged 10–14 / Grades 5–9, Dhaka Phase 1 Oct 2023 + nationwide Phase 2 Oct 2024) citing Gavi VaccinesWork (10 Dec 2024), WHO Bangladesh (18 Dec 2024), and WHO HPV Position Paper (Dec 2022). Clarified `rotavirus` (`category: 'non_routine'`, `bd-planned-introduction`, `not-yet-introduced-bd`) citing WHO Bangladesh & WHO Rotavirus Position Paper (July 2021), separate from private-market formulations.
+- **C-004 (`resolved-with-source`) — EPI vs Private/International catalogue separation:** Removed `category: 'routine'` from all 9 non-EPI entries (`mmr`, `hepatitisB`, `polio-ipv`, `dtp`, `hib`, `pentavalent-booster`, `dtap`, `tdap`, `hexavalent`), leaving strictly the 7 Bangladesh routine EPI antigens (`bcg`, `opv`, `pentavalent`, `pcv`, `fipv`, `mr`, `tcv`) tagged `routine`. Added a **Programme scope** UI filter and per-card programme labels in `VaccinesPage.tsx`.
+- **C-007 (`resolved-with-source`) — Cholera OCV unification:** Added structured record `rec-cholera` covering `cholera` & `choleraWC` citing WHO Cholera Position Paper (Aug 2017) and WHO Bangladesh (20 Aug 2026 Euvichol-S 2-dose ≥14d campaign across 14 high-risk areas, plus 1-dose acute outbreak option); corrected misleading copy on `choleraWC`.
+- **C-008 (`resolved-with-source`) — Research-stage isolation & dated burden stats:** Preserved `isPublishable: false` and AI assistant exclusion for `hiv`, `tb-new`, and `cancer-cervical`, cited dated 2026 WHO Fact Sheets directly, replaced `0 doses` UI copy with `Research only — 0 licensed doses`, and hid "Record a dose" CTAs for research entries.
+
+### Preserved open conflicts (2 of 8: C-005, C-006)
+
+- **C-005 (`unresolved`) — Domestic catch-up upper age caps & October 2026 EPI review output:** Primary DGHS/MOHFW operational circulars and the published output of the 4–14 October 2026 independent WHO/national EPI review have not yet been obtained. Domestic `maximumAge` fields stay `null` (`requires-professional-review`) and `generateCatchUpPlan()` continues returning `minimumInterval: null`, `recommendedNextDate: null`, `requiresMedicalAdvice: true`.
+- **C-006 (`unresolved`) — TCV August 2026 routine EPI primary circular:** Nationwide TCV campaign coverage (~50M children) and July 2026 BSS/Daily Star reports of 15-month routine inclusion starting 1 August 2026 are registered, while the primary DGHS/MOHFW circular URL and updated WHO Bangladesh topic page timeline remain outstanding (`conflict-unresolved`).
+
+### Sources, records, validator & tests
+
+- `src/data/evidence/sources.ts` — Expanded to 54 verified source entries (15 WHO Position Papers/Tables `fetched-and-reviewed`, 11 Tier-1 Bangladesh/UNICEF/Gavi/news sources, 22 WHO Fact Sheets, 2 legacy portals, 4 rejected homepage/gap entries). Tightened `isSufficientForClinicalClaim()` to require `verification === 'fetched-and-reviewed'` and added `isSufficientForBackgroundClaim()`.
+- `src/data/evidence/records.ts` — Updated all 9 existing records and added `rec-cholera` (10 structured records) with section-level WHO Position Paper, WHO Bangladesh, UNICEF, and Gavi citations, maintaining full English & Bangla parity.
+- `src/lib/evidenceValidator.ts` — Enforced claim-kind source sufficiency (`CLINICAL_CLAIM_KINDS` vs `programme-fact` vs `disease-burden`/`general-description`), validated resolved conflict decision/reviewer/date/evidence citations, and rendered both open and resolved conflicts in `docs/EVIDENCE-REVIEW.md`.
+- `src/data/evidence/bridge.ts` & `index.ts` — Linked `recordId` across all 11 mapped legacy ids, derived `reviewStatus` dynamically, and bumped `KNOWLEDGE_BASE_VERSION` to `3.1.0`.
+- `npm run evidence:report` snapshot: `167 findings — 0 blocking errors, 26 warnings, 141 accepted gaps; 2 unresolved conflicts; 6 resolved conflicts; 90 items awaiting professional review.`
+- Test suite (`src/tests/evidence.test.ts`, `evidenceUi.test.tsx`, `doseLedger.test.ts`, `doseRegression.test.ts`, `botContext.test.ts`): all 43 test files (881 tests) passing.
+
+---
+
 ## 3.0.0-alpha.2 — 2026-11-02 (schema 3.0.0, knowledge base unchanged)
 
 An application release: **no medical content, classification, conflict or source

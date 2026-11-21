@@ -57,7 +57,7 @@ describe('app smoke test', () => {
     expect(screen.queryByText(ERROR_MARKER)).toBeNull();
   });
 
-  const lazyRoutes = ['/analytics', '/reminders', '/compare', '/passport'];
+  const lazyRoutes = ['/analytics', '/reminders', '/compare', '/passport', '/cold-chain', '/readiness'];
 
   it.each(lazyRoutes)('lazy-loads the code-split route %s', async (path) => {
     renderAt(path);

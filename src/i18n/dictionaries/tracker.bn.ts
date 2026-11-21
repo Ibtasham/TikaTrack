@@ -201,7 +201,7 @@ export const bn: TranslationDictionary = {
   'tracker.catchUp.review': 'এর কিছু হয়তো আগেই দেওয়া হয়েছে — রেকর্ডগুলো নিশ্চিত করা প্রয়োজন।',
   'tracker.add.error.empty-name': 'অনুগ্রহ করে নাম লিখুন।',
   'tracker.add.error.missing-dob': 'অনুগ্রহ করে জন্ম তারিখ লিখুন।',
-  'tracker.add.error.invalid-dob': 'জন্ম তারিখটি পড়া যায়নি।',
+  'tracker.add.error.invalid-dob': 'অনুগ্রহ করে একটি সঠিক ক্যালেন্ডার জন্ম তারিখ লিখুন।',
   'tracker.add.error.future-dob': 'জন্ম তারিখ ভবিষ্যতের হতে পারে না।',
   'tracker.add.error.name-too-long': 'নামটি অনেক বড়।',
   'tracker.import.doses': '{0}টি নতুন ডোজ, {1}টি হালনাগাদ, {2}টি এই ডিভাইসে আগেই ছিল।',
@@ -228,4 +228,39 @@ export const bn: TranslationDictionary = {
   'tracker.care.urgentBody':
     '১০২°F (৩৯°C)-এর বেশি তীব্র জ্বর হয়, টানা ৩ ঘণ্টার বেশি থামানো না যাওয়া কান্না থাকে, শ্বাসকষ্ট বা মুখ/ঠোঁট ফুলে যায়, অথবা খিঁচুনি বা হঠাৎ নিস্তেজ ভাব দেখা দেয়।',
   'tracker.growth': 'বৃদ্ধি ও WHO',
+  'tracker.passport.download': 'টিকাদান পাসপোর্ট ডাউনলোড',
+  'tracker.passport.title': 'QR কোডসহ প্রিন্টযোগ্য PDF টিকাদান পাসপোর্ট তৈরি করুন',
+  'tracker.dose.warn.beforeDob':
+    'সতর্কতা: {0} জন্ম তারিখের ({1}) আগের। প্রয়োজনে সংরক্ষণ করতে পারেন অথবা তারিখ ঠিক করুন।',
+  'tracker.dose.warn.exactDuplicate':
+    'সতর্কতা: {0}-এর জন্য {1} তারিখে একটি এন্ট্রি আগেই আছে। সংরক্ষণ করলে ডুপ্লিকেট ভিজিট যুক্ত হবে।',
+  'tracker.dose.warn.chronology':
+    'ক্রম সতর্কতা: {0} পূর্ববর্তী রেকর্ডকৃত ডোজের ({1}) আগের তারিখের। কাগজের কার্ডের সঙ্গে মিলিয়ে দেখুন।',
+  'tracker.dose.anomaly.beforeDob': 'তারিখটি জন্মতারিখের আগের — যাচাই ও সংশোধন করুন।',
+  'tracker.dose.anomaly.chronology': 'সিরিজের পূর্ববর্তী ডোজের চেয়ে আগের তারিখে লেখা।',
+  'tracker.intelligence.title': 'সময়সূচি বিশ্লেষণ ও ক্লিনিক্যাল সীমাবদ্ধতা',
+  'tracker.intelligence.subtitle':
+    'ভিত্তি তারিখ {0} ({1}) · প্রতিটি ধাপ জন্ম তারিখ ও পৃথক ডোজ রেকর্ড থেকে হিসাব করা হয়েছে।',
+  'tracker.intelligence.dueProgress': 'বর্তমান বয়স পর্যন্ত অগ্রগতি',
+  'tracker.intelligence.dueProgressRatio': 'প্রাপ্য {1}টি ডোজের {0}টি সম্পন্ন',
+  'tracker.intelligence.confirmedVsProvisional': '{0}টি নিশ্চিত ডোজ · {1}টি অনিশ্চিত স্লট',
+  'tracker.intelligence.bucketCompleted': 'সম্পন্ন',
+  'tracker.intelligence.bucketCompletedDetail': '{0}টি নিশ্চিত ডোজ নম্বর, {1}টি সাময়িক মিল',
+  'tracker.intelligence.bucketUpcoming': 'আসন্ন',
+  'tracker.intelligence.bucketUpcomingDetail': '{0}টি আজ প্রাপ্য · {1}টি ভবিষ্যতে নির্ধারিত',
+  'tracker.intelligence.bucketOverdue': 'সম্ভাব্য বকেয়া',
+  'tracker.intelligence.bucketOverdueDetail': 'স্বয়ংক্রিয় ক্যাচ-আপ বিরতি নেই (ইপিআই ক্লিনিকে পরামর্শ নিন)',
+  'tracker.intelligence.bucketUncertain': 'অনিশ্চিত / অসঙ্গতি',
+  'tracker.intelligence.bucketUncertainDetail': '{0}টি রেকর্ডের অসঙ্গতি · {1}টি সূচির বাইরের এন্ট্রি',
+  'tracker.intelligence.bucketHcw': 'স্বাস্থ্যকর্মী পর্যালোচনা',
+  'tracker.intelligence.bucketHcwDetail': '{0}টি বিষয়ে ক্লিনিক্যাল যাচাই প্রয়োজন',
+  'tracker.intelligence.limitationsTitle': 'হিসাবের সীমাবদ্ধতা ও অমীমাংসিত তথ্য (C-005 / C-006)',
+  'tracker.intelligence.toggleDetails': 'বিস্তারিত ক্লিনিক্যাল বিশ্লেষণ দেখুন',
+  'tracker.intelligence.hideDetails': 'বিস্তারিত বিশ্লেষণ লুকান',
+  'tracker.intelligence.hcwListTitle': 'স্বাস্থ্যকর্মীর পর্যালোচনা প্রয়োজন এমন বিষয়',
+  'tracker.intelligence.anomalyListTitle': 'শনাক্তকৃত রেকর্ডের অসঙ্গতি',
+  'tracker.intelligence.noIssues': 'কোনো সময়ের অসঙ্গতি, অনিশ্চিত রেকর্ড বা বকেয়া ডোজ পাওয়া যায়নি।',
+  'tracker.catchUp.olderAgeNote':
+    '৭+ বছর বয়স যাচাই: শিশুদের ক্যাচ-আপ ডোজ এখনও প্রযোজ্য কিনা স্বাস্থ্যকর্মীকে জিজ্ঞাসা করুন।',
 };
+

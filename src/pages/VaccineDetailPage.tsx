@@ -5,10 +5,16 @@ import {
   ArrowLeft,
   Calendar,
   Check,
+  ClipboardCheck,
+  Clock,
   ExternalLink,
+  FlaskConical,
+  HeartPulse,
   Info,
   Scale,
   ShieldAlert,
+  ShieldCheck,
+  Snowflake,
   Syringe,
   ThermometerSun,
   Users,
@@ -19,6 +25,7 @@ import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { usePersistentState } from '../hooks';
 import { useI18n } from '../i18n';
+import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
 import { allVaccines, vaccineColors } from '../data/vaccines';
 import { evidenceForLegacy, KNOWLEDGE_BASE_VERSION } from '../data/evidence';
 import { KNOWLEDGE_SCHEMA_VERSION } from '../data/evidence/types';
@@ -97,6 +104,7 @@ export default function VaccineDetailPage() {
   const [showDisclaimer, setShowDisclaimer] = useState(true);
 
   const vaccine = useMemo(() => allVaccines.find((entry) => entry.id === vaccineId), [vaccineId]);
+  const clinical = useMemo(() => (vaccine ? getVaccineClinicalProfile(vaccine) : null), [vaccine]);
   const evidence = useMemo(() => (vaccine ? evidenceForLegacy(vaccine.id) : null), [vaccine]);
   const familyStatuses = useMemo(() => {
     if (!vaccine || profiles.length === 0) return [];
@@ -177,22 +185,29 @@ export default function VaccineDetailPage() {
               >
                 {vaccine.fullName[language]}
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`badge bg-white/25 ${colour.text}`}>
+              <p
+                className={`mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium ${colour.text} opacity-95 tabular-nums`}
+              >
+                <span>
                   {evidence
                     ? t(`vaccines.programme.${evidence.programme}`)
                     : t(`vaccines.category.${vaccine.category}`)}
                 </span>
-                <span className={`badge bg-white/25 ${colour.text}`}>
-                  <Syringe className="h-3 w-3" aria-hidden="true" />
-                  {t('vaccines.doses', vaccine.doses)}
+                <span aria-hidden="true">·</span>
+                <span>
+                  {evidence && !evidence.publishable
+                    ? t('vaccines.researchOnlyDoses')
+                    : t('vaccines.doses', vaccine.doses)}
                 </span>
                 {vaccine.efficacy && (
-                  <span className={`badge bg-white/25 ${colour.text}`}>
-                    {t('vaccines.efficacy')}: {vaccine.efficacy}
-                  </span>
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {t('vaccines.efficacy')}: {vaccine.efficacy}
+                    </span>
+                  </>
                 )}
-              </div>
+              </p>
             </div>
           </div>
         </div>
@@ -279,13 +294,15 @@ export default function VaccineDetailPage() {
             {t('nav.compare')} ({selectedIds.length})
           </Link>
         )}
-        <Link
-          to={`/tracker?vaccine=${encodeURIComponent(vaccine.id)}&action=record`}
-          className="btn-ghost"
-        >
-          <Syringe className="h-4 w-4" aria-hidden="true" />
-          {t('vaccines.detail.recordDose')}
-        </Link>
+        {(!evidence || evidence.publishable) && (
+          <Link
+            to={`/tracker?vaccine=${encodeURIComponent(vaccine.id)}&action=record`}
+            className="btn-ghost"
+          >
+            <Syringe className="h-4 w-4" aria-hidden="true" />
+            {t('vaccines.detail.recordDose')}
+          </Link>
+        )}
         {vaccine.sourceUrl && (
           <a
             className="btn-ghost"
@@ -341,13 +358,15 @@ export default function VaccineDetailPage() {
                       {statusLabel}
                     </p>
                   </div>
-                  <Link
-                    to={`/tracker?member=${encodeURIComponent(member.id)}&vaccine=${encodeURIComponent(vaccine.id)}&action=record`}
-                    className="btn-secondary btn-sm shrink-0"
-                  >
-                    <Syringe className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('vaccines.detail.recordDose')}
-                  </Link>
+                  {(!evidence || evidence.publishable) && (
+                    <Link
+                      to={`/tracker?member=${encodeURIComponent(member.id)}&vaccine=${encodeURIComponent(vaccine.id)}&action=record`}
+                      className="btn-secondary btn-sm shrink-0"
+                    >
+                      <Syringe className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('vaccines.detail.recordDose')}
+                    </Link>
+                  )}
                 </li>
               );
             })}
@@ -356,17 +375,104 @@ export default function VaccineDetailPage() {
       )}
 
       {/* --- Body ---------------------------------------------------------- */}
+      {clinical && (
+        <section
+          className="card-padded mt-5"
+          aria-labelledby="clinical-specs-title"
+        >
+          <h2
+            id="clinical-specs-title"
+            className={`flex items-center gap-2 text-base font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+          >
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              aria-hidden="true"
+            >
+              <FlaskConical className="h-4 w-4" />
+            </span>
+            {t('vaccines.detail.clinicalSpecs')}
+          </h2>
+
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            {[
+              {
+                icon: FlaskConical,
+                label: t('vaccines.detail.platform'),
+                value: clinical.platform[language],
+              },
+              {
+                icon: Syringe,
+                label: t('vaccines.detail.route'),
+                value: clinical.route[language],
+              },
+              {
+                icon: Clock,
+                label: t('vaccines.detail.doseVolume'),
+                value: clinical.doseVolume[language],
+              },
+              {
+                icon: Snowflake,
+                label: t('vaccines.detail.coldChain'),
+                value: clinical.coldChain[language],
+              },
+              {
+                icon: ShieldCheck,
+                label: t('vaccines.detail.immunityProfile'),
+                value: clinical.immunityProfile[language],
+              },
+              {
+                icon: Info,
+                label: t('vaccines.detail.formulations'),
+                value: clinical.formulations,
+              },
+            ].map(({ icon: Icon, label, value }) => (
+              <div
+                key={label}
+                className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 dark:border-neutral-800 dark:bg-neutral-800/50"
+              >
+                <dt
+                  className={`flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  <Icon className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  {label}
+                </dt>
+                <dd
+                  className={`mt-1.5 text-sm leading-relaxed text-neutral-900 tabular-nums dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
       <div className="mt-5 grid gap-5">
         <DetailSection
           icon={Info}
           titleKey="vaccines.detail.description"
           body={vaccine.description[language]}
         />
+        {clinical && (
+          <DetailSection
+            icon={Calendar}
+            titleKey="vaccines.detail.dosingProtocol"
+            body={clinical.dosingProtocol[language]}
+          />
+        )}
         <DetailSection
           icon={ShieldAlert}
           titleKey="vaccines.detail.diseaseRisk"
           body={vaccine.diseaseRisk[language]}
         />
+        {clinical && (
+          <DetailSection
+            icon={HeartPulse}
+            titleKey="vaccines.detail.specialPopulations"
+            body={clinical.specialPopulations[language]}
+            tone="caution"
+          />
+        )}
         <DetailSection
           icon={ThermometerSun}
           titleKey="vaccines.detail.commonEffects"
@@ -385,6 +491,13 @@ export default function VaccineDetailPage() {
           body={vaccine.contraindications[language]}
           tone="danger"
         />
+        {clinical && (
+          <DetailSection
+            icon={ClipboardCheck}
+            titleKey="vaccines.detail.aftercare"
+            body={clinical.aftercare[language]}
+          />
+        )}
       </div>
 
       {/* --- Source -------------------------------------------------------- */}
@@ -534,32 +647,69 @@ export default function VaccineDetailPage() {
               >
                 {t('vaccines.evidence.conflicts')}
               </h3>
-              <p
-                className={`mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
-              >
-                {t('vaccines.evidence.conflictStatus')}
-              </p>
+              {evidence.conflicts.some((c) => c.status === 'unresolved') && (
+                <p
+                  className={`mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {t('vaccines.evidence.conflictStatus')}
+                </p>
+              )}
               <ul className="mt-2 space-y-3">
-                {evidence.conflicts.map((conflict) => (
-                  <li
-                    key={conflict.id}
-                    className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40"
-                  >
-                    <p
-                      className={`text-sm font-medium text-amber-900 dark:text-amber-100 ${isBangla ? 'font-bangla' : ''}`}
+                {evidence.conflicts.map((conflict) => {
+                  const resolved = conflict.status !== 'unresolved';
+                  return (
+                    <li
+                      key={conflict.id}
+                      className={`rounded-xl border p-3 ${
+                        resolved
+                          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40'
+                          : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40'
+                      }`}
                     >
-                      {conflict.id} — {conflict.title[language]}
-                    </p>
-                    <p
-                      className={`mt-1 text-xs text-amber-900/80 dark:text-amber-200/80 ${isBangla ? 'font-bangla' : ''}`}
-                    >
-                      <span className="font-semibold">
-                        {t('vaccines.evidence.requiredAction')}:
-                      </span>{' '}
-                      {conflict.requiredAction}
-                    </p>
-                  </li>
-                ))}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p
+                          className={`text-sm font-medium ${
+                            resolved
+                              ? 'text-emerald-900 dark:text-emerald-100'
+                              : 'text-amber-900 dark:text-amber-100'
+                          } ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          {conflict.id} — {conflict.title[language]}
+                        </p>
+                        <span
+                          className={`text-xs font-semibold ${
+                            resolved
+                              ? 'text-emerald-800 dark:text-emerald-300'
+                              : 'text-amber-800 dark:text-amber-300'
+                          } ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          {resolved
+                            ? t('vaccines.evidence.conflictResolved')
+                            : t('vaccines.evidence.conflictUnresolved')}
+                        </span>
+                      </div>
+                      {resolved && conflict.resolution ? (
+                        <p
+                          className={`mt-1 text-xs text-emerald-900/85 dark:text-emerald-200/85 ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          <span className="font-semibold">
+                            {t('vaccines.evidence.resolutionDecision')}:
+                          </span>{' '}
+                          {conflict.resolution.decision}
+                        </p>
+                      ) : (
+                        <p
+                          className={`mt-1 text-xs text-amber-900/80 dark:text-amber-200/80 ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          <span className="font-semibold">
+                            {t('vaccines.evidence.requiredAction')}:
+                          </span>{' '}
+                          {conflict.requiredAction}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

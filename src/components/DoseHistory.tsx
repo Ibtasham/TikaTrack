@@ -7,12 +7,13 @@ import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
 import {
+  analyzeDoseHistoryAnomalies,
   eventsForVaccine,
   eventsNeedingReview,
   milestoneDoses,
   vaccineIdsInLedger,
 } from '../lib/doseLedger';
-import { formatDate, todayISO } from '../lib/format';
+import { formatDate, isValidISODate, todayISO } from '../lib/format';
 import type { Profile, VaccinationEvent } from '../types';
 
 interface Draft {
@@ -69,6 +70,10 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
   const events = useMemo(() => profile.events ?? [], [profile.events]);
   const history = historyFor(profile);
   const reviewCount = eventsNeedingReview(events).length;
+  const anomalies = useMemo(
+    () => analyzeDoseHistoryAnomalies(events, profile.dateOfBirth),
+    [events, profile.dateOfBirth],
+  );
 
   const groups = useMemo(
     () =>
@@ -359,7 +364,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                             type="button"
                             className="btn-primary btn-sm"
                             onClick={() => {
-                              if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) {
+                              if (!isValidISODate(draft.date)) {
                                 setDraftError(t('tracker.dose.error.invalid-date'));
                                 return;
                               }
@@ -475,6 +480,30 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                               )}
                             </div>
                           )}
+
+                          {anomalies
+                            .filter(
+                              (item) =>
+                                item.eventId === event.id &&
+                                (item.type === 'before-dob' ||
+                                  item.type === 'chronological-inversion'),
+                            )
+                            .map((item) => (
+                              <p
+                                key={item.id}
+                                className={`mt-1.5 flex items-start gap-2 text-xs font-medium text-red-700 dark:text-red-300 ${isBangla ? 'font-bangla' : ''}`}
+                              >
+                                <TriangleAlert
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                {t(
+                                  item.type === 'before-dob'
+                                    ? 'tracker.dose.anomaly.beforeDob'
+                                    : 'tracker.dose.anomaly.chronology',
+                                )}
+                              </p>
+                            ))}
                         </div>
 
                         <div className="flex shrink-0 gap-1">

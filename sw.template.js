@@ -7,8 +7,8 @@
  * generated one.
  *
  * Strategy
- *   install  → precache the app shell (hashed assets, index.html, icons), then
- *              `skipWaiting()` so a new build takes over without a manual reload
+ *   install  → precache the app shell (hashed assets, index.html, icons) and wait
+ *              so open forms aren't interrupted until the user accepts the update
  *   activate → delete caches left behind by previous builds, then `clients.claim()`
  *   navigate → network first; on a network error *or* an error response (a GitHub
  *              Pages deep link returns the `404.html` bounce page) serve the
@@ -27,6 +27,7 @@
 const CACHE_NAME = '{{CACHE_NAME}}';
 const BASE = '{{BASE}}';
 const PRECACHE = /* {{PRECACHE}} */ [];
+const IS_DEV = CACHE_NAME === 'tikatrack-dev';
 
 /** The SPA shell: what a navigation falls back to when the network is gone. */
 const OFFLINE_URL = `${BASE}index.html`;
@@ -34,6 +35,11 @@ const OFFLINE_URL = `${BASE}index.html`;
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
+      if (IS_DEV) {
+        await self.skipWaiting();
+        return;
+      }
+
       const cache = await caches.open(CACHE_NAME);
       // `addAll` would reject the whole install if a single optional file 404s,
       // so add them one by one and only require the shell itself to succeed.
@@ -44,8 +50,8 @@ self.addEventListener('install', (event) => {
       if (!(await cache.match(OFFLINE_URL))) {
         throw new Error('[sw] app shell could not be cached — aborting install');
       }
-      // Take over from the previous worker as soon as every client is idle.
-      await self.skipWaiting();
+      // Stay in the waiting state until AppStatus dispatches SKIP_WAITING so we
+      // never reload or swap assets under an active form or dose entry.
     })(),
   );
 });
@@ -66,10 +72,92 @@ self.addEventListener('activate', (event) => {
 
 /** Lets the page ask the waiting worker to take over ("Update available"). */
 self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data === 'SKIP_WAITING' || event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      try {
+        payload = { body: event.data.text() };
+      } catch {
+        payload = {};
+      }
+    }
+  }
+
+  const title = payload.title || 'TikaTrack Vaccination Reminder';
+  const body =
+    payload.body || 'An upcoming vaccination dose is scheduled in 48 hours.';
+  const targetUrl = payload.url || `${BASE}reminders`;
+  const icon = payload.icon || `${BASE}icons/icon-192.png`;
+  const badge = payload.badge || `${BASE}icons/icon-192.png`;
+  const actions = Array.isArray(payload.actions) ? payload.actions : undefined;
+
+  const options = {
+    body,
+    icon,
+    badge,
+    tag: payload.tag || 'tikatrack-48h-reminder',
+    renotify: Boolean(payload.renotify),
+    requireInteraction: Boolean(payload.requireInteraction),
+    data: {
+      url: targetUrl,
+      recordUrl: payload.recordUrl || `${BASE}tracker`,
+      profileId: payload.profileId || null,
+      vaccineId: payload.vaccineId || null,
+      scheduledDate: payload.scheduledDate || null,
+    },
+    ...(actions ? { actions } : {}),
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const relativeTarget =
+    event.action === 'record' && data.recordUrl
+      ? data.recordUrl
+      : data.url || `${BASE}reminders`;
+  const targetUrl = new URL(relativeTarget, self.location.origin).href;
+
+  event.waitUntil(
+    (async () => {
+      const windowClients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      for (const client of windowClients) {
+        if (client.url.startsWith(self.location.origin)) {
+          if (typeof client.navigate === 'function') {
+            await client.navigate(targetUrl).catch(() => undefined);
+          }
+          if (typeof client.focus === 'function') {
+            return client.focus();
+          }
+        }
+      }
+
+      if (typeof self.clients.openWindow === 'function') {
+        return self.clients.openWindow(targetUrl);
+      }
+      return undefined;
+    })(),
+  );
 });
 
 self.addEventListener('fetch', (event) => {
+  if (IS_DEV) return;
+
   const { request } = event;
   if (request.method !== 'GET') return;
 
@@ -120,3 +208,4 @@ async function asset(request, url) {
     return cached || Response.error();
   }
 }
+

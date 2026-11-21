@@ -26,6 +26,8 @@ import * as auth from './dictionaries/auth.en';
 import * as authBn from './dictionaries/auth.bn';
 import * as centres from './dictionaries/centres.en';
 import * as centresBn from './dictionaries/centres.bn';
+import * as coldchain from './dictionaries/coldchain.en';
+import * as coldchainBn from './dictionaries/coldchain.bn';
 import * as common from './dictionaries/common.en';
 import * as commonBn from './dictionaries/common.bn';
 import * as compare from './dictionaries/compare.en';
@@ -44,6 +46,8 @@ import * as passport from './dictionaries/passport.en';
 import * as passportBn from './dictionaries/passport.bn';
 import * as privacy from './dictionaries/privacy.en';
 import * as privacyBn from './dictionaries/privacy.bn';
+import * as readiness from './dictionaries/readiness.en';
+import * as readinessBn from './dictionaries/readiness.bn';
 import * as reminders from './dictionaries/reminders.en';
 import * as remindersBn from './dictionaries/reminders.bn';
 import * as schedule from './dictionaries/schedule.en';
@@ -83,9 +87,11 @@ const english: TranslationDictionary = mergeAll(
   scheduler.en,
   tracker.en,
   centres.en,
+  coldchain.en,
   tikabot.en,
   analytics.en,
   reminders.en,
+  readiness.en,
   compare.en,
   passport.en,
   dashboard.en,
@@ -110,9 +116,11 @@ const bangla: TranslationDictionary = mergeAll(
   schedulerBn.bn,
   trackerBn.bn,
   centresBn.bn,
+  coldchainBn.bn,
   tikabotBn.bn,
   analyticsBn.bn,
   remindersBn.bn,
+  readinessBn.bn,
   compareBn.bn,
   passportBn.bn,
   dashboardBn.bn,

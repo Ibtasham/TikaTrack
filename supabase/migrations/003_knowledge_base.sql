@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   response_time_ms INTEGER,
   
   -- Feedback
-  user_feedback TEXT CHECK (user_feedback IN ('helpful', 'not_helpful', NULL)),
+  user_feedback TEXT CHECK (user_feedback IS NULL OR user_feedback IN ('helpful', 'not_helpful')),
   feedback_comment TEXT,
   
   -- Safety
@@ -399,18 +399,19 @@ BEGIN
       ELSE NULL
     END,
     'recent_messages', (
-      SELECT jsonb_agg(
-        jsonb_build_object(
+      SELECT jsonb_agg(msg)
+      FROM (
+        SELECT jsonb_build_object(
           'role', cm.role,
           'content', cm.content,
           'content_bn', cm.content_bn,
           'created_at', cm.created_at
-        )
+        ) AS msg
+        FROM chat_messages cm
+        WHERE cm.conversation_id = cc.id
         ORDER BY cm.created_at DESC
         LIMIT 10
-      )
-      FROM chat_messages cm
-      WHERE cm.conversation_id = cc.id
+      ) sub
     )
   ) INTO context_data
   FROM chat_conversations cc
@@ -420,10 +421,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON TEXT IS 'TikaBot AI 2.0 knowledge base schema complete. Includes:
-- Knowledge sources with approval workflow
-- Knowledge articles with versioning and review
-- Knowledge chunks for RAG
-- Chat conversations with personalization
-- Chat messages with citations and feedback
-- Chat suggestions for guided conversations';
+/*
+ * TikaBot AI 2.0 knowledge base schema complete. Includes:
+ * - Knowledge sources with approval workflow
+ * - Knowledge articles with versioning and review
+ * - Knowledge chunks for RAG
+ * - Chat conversations with personalization
+ * - Chat messages with citations and feedback
+ * - Chat suggestions for guided conversations
+ */

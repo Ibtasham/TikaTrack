@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import { AppStatus } from '../components/AppStatus';
+import { CommandPalette } from '../components/CommandPalette';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MobileBottomNav } from '../components/MobileBottomNav';
 import { WelcomeDialog } from '../components/WelcomeDialog';
@@ -39,6 +40,8 @@ export function Layout() {
       <Footer />
 
       <MobileBottomNav />
+
+      <CommandPalette />
 
       {/* First-run tour. Mounted here rather than on the home route so a visitor
           who arrives on a deep link is greeted too. */}

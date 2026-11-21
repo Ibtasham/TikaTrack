@@ -7,6 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {
+  onAuthStateChanged,
+  reauthenticateWithPopup,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+  type User as FirebaseUser,
+} from 'firebase/auth';
 import type {
   AuthBackend,
   AuthResult,
@@ -15,6 +22,8 @@ import type {
   FamilyRole,
   UserProfile,
 } from '../types/auth';
+import { auth, googleAuthProvider } from '../lib/firebase';
+import { deleteAllFirebaseUserDocs, ensureFirebaseAccountDocs } from '../services/cloudSync';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   localChangePassword,
@@ -31,19 +40,22 @@ interface AuthState {
   user: UserProfile | null;
   /** Kept for backwards compatibility with the Supabase user object shape. */
   userProfile: UserProfile | null;
+  firebaseUser: FirebaseUser | null;
   family: Family | null;
   familyMembers: FamilyMember[];
   loading: boolean;
   error: string | null;
   /** Which implementation is active. */
   backend: AuthBackend;
-  /** `true` when cloud sync is available (Supabase configured). */
+  /** `true` when cloud sync is available (Firebase Google Sign-In or Supabase configured). */
   cloudEnabled: boolean;
 }
 
 interface AuthActions {
   signUp: (email: string, password: string, fullName: string) => Promise<AuthResult>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
+  signInWithGoogle: () => Promise<AuthResult>;
+  getFirebaseIdToken: () => Promise<string | null>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<AuthResult>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthResult>;
@@ -64,47 +76,97 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const cloudDisabled: AuthResult = {
   error: {
     code: 'cloud-disabled',
-    message: 'Family sharing needs cloud sync. Add your Supabase keys to .env.local to enable it.',
+    message: 'Family sharing needs Supabase multi-member invites configured.',
   },
 };
 
+function firebaseUserToProfile(fbUser: FirebaseUser): UserProfile {
+  const now = new Date().toISOString();
+  return {
+    id: fbUser.uid,
+    email: fbUser.email || '',
+    full_name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Family Member',
+    avatar_url: fbUser.photoURL || undefined,
+    language_preference: 'en',
+    email_verified: fbUser.emailVerified,
+    created_at: fbUser.metadata.creationTime || now,
+    updated_at: now,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const cloudEnabled = useMemo(() => isSupabaseConfigured(), []);
-  const backend: AuthBackend = cloudEnabled ? 'supabase' : 'local';
+  const supabaseConfigured = useMemo(() => isSupabaseConfigured(), []);
 
   const [state, setState] = useState<AuthState>({
     user: null,
     userProfile: null,
+    firebaseUser: null,
     family: null,
     familyMembers: [],
     loading: true,
     error: null,
-    backend,
-    cloudEnabled,
+    backend: supabaseConfigured ? 'supabase' : 'local',
+    cloudEnabled: supabaseConfigured,
   });
 
-  const setUser = useCallback((user: UserProfile | null) => {
-    setState((previous) => ({ ...previous, user, userProfile: user, loading: false, error: null }));
-  }, []);
+  const setUser = useCallback((user: UserProfile | null, backendOverride?: AuthBackend) => {
+    setState((previous) => {
+      const nextBackend =
+        backendOverride ?? (previous.firebaseUser ? 'firebase' : supabaseConfigured ? 'supabase' : 'local');
+      return {
+        ...previous,
+        user,
+        userProfile: user,
+        backend: nextBackend,
+        cloudEnabled: nextBackend !== 'local',
+        loading: false,
+        error: null,
+      };
+    });
+  }, [supabaseConfigured]);
 
-  // Restore the session on boot.
+  // Restore local/Supabase session + subscribe to Firebase Auth.
   useEffect(() => {
     let cancelled = false;
 
-    async function bootstrap() {
-      if (!cloudEnabled) {
+    async function bootstrapLegacy() {
+      if (!supabaseConfigured) {
         const local = localGetSession();
-        if (!cancelled) setUser(local);
+        if (!cancelled) {
+          setState((previous) =>
+            previous.firebaseUser
+              ? previous
+              : {
+                  ...previous,
+                  user: local,
+                  userProfile: local,
+                  backend: 'local',
+                  cloudEnabled: false,
+                  loading: false,
+                },
+          );
+        }
         return;
       }
       try {
         const profile = await cloud.supabaseGetSession();
         if (!cancelled && profile) {
-          setUser(profile);
+          setState((previous) =>
+            previous.firebaseUser
+              ? previous
+              : {
+                  ...previous,
+                  user: profile,
+                  userProfile: profile,
+                  backend: 'supabase',
+                  cloudEnabled: true,
+                  loading: false,
+                },
+          );
           const { family, members } = await cloud.supabaseLoadFamily(profile.id);
           if (!cancelled) setState((prev) => ({ ...prev, family, familyMembers: members }));
         } else if (!cancelled) {
-          setUser(null);
+          setState((prev) => (prev.firebaseUser ? prev : { ...prev, loading: false }));
         }
       } catch (error) {
         if (!cancelled) {
@@ -117,21 +179,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    void bootstrap();
+    void bootstrapLegacy();
+
+    if (import.meta.env.MODE === 'test') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (cancelled) return;
+      if (fbUser) {
+        const profile = firebaseUserToProfile(fbUser);
+        setState((previous) => ({
+          ...previous,
+          user: profile,
+          userProfile: profile,
+          firebaseUser: fbUser,
+          backend: 'firebase',
+          cloudEnabled: true,
+          loading: false,
+          error: null,
+        }));
+        void ensureFirebaseAccountDocs(fbUser).catch(() => {
+          /* non-fatal offline bootstrap */
+        });
+      } else {
+        setState((previous) => {
+          if (previous.backend !== 'firebase') return previous;
+          const fallbackLocal = supabaseConfigured ? null : localGetSession();
+          return {
+            ...previous,
+            firebaseUser: null,
+            user: fallbackLocal,
+            userProfile: fallbackLocal,
+            backend: supabaseConfigured ? 'supabase' : 'local',
+            cloudEnabled: supabaseConfigured,
+            loading: false,
+          };
+        });
+      }
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [cloudEnabled, setUser]);
+  }, [supabaseConfigured]);
+
+  const signInWithGoogle = useCallback(async (): Promise<AuthResult> => {
+    try {
+      const cred = await signInWithPopup(auth, googleAuthProvider);
+      const profile = firebaseUserToProfile(cred.user);
+      setState((previous) => ({
+        ...previous,
+        user: profile,
+        userProfile: profile,
+        firebaseUser: cred.user,
+        backend: 'firebase',
+        cloudEnabled: true,
+        loading: false,
+        error: null,
+      }));
+      void ensureFirebaseAccountDocs(cred.user).catch(() => {
+        /* non-fatal if offline */
+      });
+      return { error: null };
+    } catch (error) {
+      const errCode =
+        error && typeof error === 'object' && 'code' in error ? String(error.code) : 'google-auth-failed';
+      const msg =
+        errCode === 'auth/popup-closed-by-user'
+          ? 'Google sign-in popup was closed before completing.'
+          : error instanceof Error
+            ? error.message
+            : 'Google sign-in failed.';
+      return { error: { code: errCode, message: msg } };
+    }
+  }, []);
+
+  const getFirebaseIdToken = useCallback(async (): Promise<string | null> => {
+    if (!state.firebaseUser) return null;
+    try {
+      return await state.firebaseUser.getIdToken();
+    } catch {
+      return null;
+    }
+  }, [state.firebaseUser]);
 
   const signUp = useCallback(
     async (email: string, password: string, fullName: string): Promise<AuthResult> => {
-      if (cloudEnabled) {
+      if (supabaseConfigured) {
         const result = await cloud.supabaseSignUp(email, password, fullName);
-        if (result.user) setUser(result.user);
+        if (result.user) setUser(result.user, 'supabase');
         return { error: result.error };
       }
       const result = await localSignUp(email, password, fullName);
-      if (result.user) setUser(result.user);
+      if (result.user) setUser(result.user, 'local');
       return {
         error: result.error
           ? {
@@ -141,58 +285,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null,
       };
     },
-    [cloudEnabled, setUser],
+    [supabaseConfigured, setUser],
   );
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
-      if (cloudEnabled) {
+      if (supabaseConfigured) {
         const result = await cloud.supabaseSignIn(email, password);
-        if (result.user) setUser(result.user);
+        if (result.user) setUser(result.user, 'supabase');
         return { error: result.error };
       }
       const result = await localSignIn(email, password);
-      if (result.user) setUser(result.user);
+      if (result.user) setUser(result.user, 'local');
       return {
         error: result.error
           ? { code: result.error, message: describeLocalError(result.error, email) }
           : null,
       };
     },
-    [cloudEnabled, setUser],
+    [supabaseConfigured, setUser],
   );
 
   const signOut = useCallback(async () => {
-    if (cloudEnabled) await cloud.supabaseSignOut();
-    else localSignOut();
+    if (state.firebaseUser) {
+      await firebaseSignOut(auth);
+    }
+    if (supabaseConfigured) await cloud.supabaseSignOut();
+    localSignOut();
     setState((previous) => ({
       ...previous,
       user: null,
       userProfile: null,
+      firebaseUser: null,
       family: null,
       familyMembers: [],
+      backend: supabaseConfigured ? 'supabase' : 'local',
+      cloudEnabled: supabaseConfigured,
       loading: false,
       error: null,
     }));
-  }, [cloudEnabled]);
+  }, [state.firebaseUser, supabaseConfigured]);
 
   const resetPassword = useCallback(
     async (email: string): Promise<AuthResult> => {
-      if (cloudEnabled) return cloud.supabaseResetPassword(email);
+      if (supabaseConfigured) return cloud.supabaseResetPassword(email);
       return {
         error: {
           code: 'local-mode',
           message:
-            'Password reset emails need cloud sync. In local mode, sign in with your stored password or create a new account.',
+            'Password reset emails need Supabase email auth. For Google Sign-In, manage your password through your Google Account.',
         },
       };
     },
-    [cloudEnabled],
+    [supabaseConfigured],
   );
 
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string): Promise<AuthResult> => {
-      if (cloudEnabled) return cloud.supabaseUpdatePassword(newPassword);
+      if (state.backend === 'firebase') {
+        return {
+          error: {
+            code: 'google-managed',
+            message: 'Your Google account password is managed securely in your Google Account settings.',
+          },
+        };
+      }
+      if (supabaseConfigured) return cloud.supabaseUpdatePassword(newPassword);
       const userId = state.user?.id;
       if (!userId) return { error: { code: 'no-session', message: 'You are signed out' } };
       const result = await localChangePassword(userId, currentPassword, newPassword);
@@ -202,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null,
       };
     },
-    [cloudEnabled, state.user?.id],
+    [state.backend, state.user?.id, supabaseConfigured],
   );
 
   const updateProfile = useCallback(
@@ -210,71 +368,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userId = state.user?.id;
       if (!userId) return { error: { code: 'no-session', message: 'You are signed out' } };
 
-      if (cloudEnabled) {
+      if (state.backend === 'firebase' && state.user) {
+        setUser({ ...state.user, ...updates, updated_at: new Date().toISOString() }, 'firebase');
+        return { error: null };
+      }
+
+      if (supabaseConfigured) {
         const result = await cloud.supabaseUpdateProfile(userId, updates);
-        if (result.user) setUser(result.user);
+        if (result.user) setUser(result.user, 'supabase');
         return { error: result.error };
       }
       const result = await localUpdateProfile(userId, updates);
-      if (result.user) setUser(result.user);
+      if (result.user) setUser(result.user, 'local');
       return {
         error: result.error
           ? { code: result.error, message: describeLocalError(result.error) }
           : null,
       };
     },
-    [cloudEnabled, setUser, state.user?.id],
+    [setUser, state.backend, state.user, supabaseConfigured],
   );
 
   const refreshFamily = useCallback(async () => {
-    if (!cloudEnabled || !state.user) return;
+    if (!supabaseConfigured || !state.user || state.backend !== 'supabase') return;
     const { family, members } = await cloud.supabaseLoadFamily(state.user.id);
     setState((previous) => ({ ...previous, family, familyMembers: members }));
-  }, [cloudEnabled, state.user]);
+  }, [state.backend, state.user, supabaseConfigured]);
 
   const createFamily = useCallback(
     async (name: string) => {
-      if (!cloudEnabled || !state.user) return { error: cloudDisabled.error?.message ?? null };
+      if (!supabaseConfigured || !state.user || state.backend !== 'supabase') {
+        return { error: cloudDisabled.error?.message ?? null };
+      }
       const result = await cloud.supabaseCreateFamily(name, state.user.id);
       await refreshFamily();
       return { error: result.error?.message ?? null, familyId: result.familyId };
     },
-    [cloudEnabled, refreshFamily, state.user],
+    [refreshFamily, state.backend, state.user, supabaseConfigured],
   );
 
   const inviteMember = useCallback(
     async (email: string, role: FamilyRole): Promise<AuthResult> => {
-      if (!cloudEnabled || !state.family) return cloudDisabled;
+      if (!supabaseConfigured || !state.family) return cloudDisabled;
       const result = await cloud.supabaseInviteMember(state.family.id, email, role);
       await refreshFamily();
       return result;
     },
-    [cloudEnabled, refreshFamily, state.family],
+    [refreshFamily, state.family, supabaseConfigured],
   );
 
   const removeMember = useCallback(
     async (memberId: string): Promise<AuthResult> => {
-      if (!cloudEnabled) return cloudDisabled;
+      if (!supabaseConfigured) return cloudDisabled;
       const result = await cloud.supabaseRemoveMember(memberId);
       await refreshFamily();
       return result;
     },
-    [cloudEnabled, refreshFamily],
+    [refreshFamily, supabaseConfigured],
   );
 
   const updateMemberRole = useCallback(
     async (memberId: string, role: FamilyRole): Promise<AuthResult> => {
-      if (!cloudEnabled) return cloudDisabled;
+      if (!supabaseConfigured) return cloudDisabled;
       const result = await cloud.supabaseUpdateMemberRole(memberId, role);
       await refreshFamily();
       return result;
     },
-    [cloudEnabled, refreshFamily],
+    [refreshFamily, supabaseConfigured],
   );
 
   const transferOwnership = useCallback(
     async (newOwnerId: string): Promise<AuthResult> => {
-      if (!cloudEnabled || !state.family || !state.user) return cloudDisabled;
+      if (!supabaseConfigured || !state.family || !state.user) return cloudDisabled;
       const result = await cloud.supabaseTransferOwnership(
         state.family.id,
         state.user.id,
@@ -283,23 +448,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await refreshFamily();
       return result;
     },
-    [cloudEnabled, refreshFamily, state.family, state.user],
+    [refreshFamily, state.family, state.user, supabaseConfigured],
   );
 
   const deleteAccount = useCallback(async () => {
-    if (cloudEnabled) {
+    if (state.firebaseUser) {
+      const fbUser = state.firebaseUser;
+      try {
+        const token = await fbUser.getIdToken();
+        await fetch('/api/account', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => undefined);
+      } catch {
+        /* ignore offline token/network errors */
+      }
+
+      await deleteAllFirebaseUserDocs(fbUser.uid).catch(() => undefined);
+
+      try {
+        await fbUser.delete();
+      } catch (err) {
+        const code =
+          err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : '';
+        if (code === 'auth/requires-recent-login') {
+          await reauthenticateWithPopup(fbUser, googleAuthProvider);
+          await fbUser.delete();
+        } else {
+          throw err;
+        }
+      }
+      await signOut().catch(() => undefined);
+      return;
+    }
+
+    if (supabaseConfigured) {
       await signOut();
       return;
     }
     if (state.user) await localDeleteAccount(state.user.id);
-    setUser(null);
-  }, [cloudEnabled, setUser, signOut, state.user]);
+    setUser(null, 'local');
+  }, [setUser, signOut, state.firebaseUser, state.user, supabaseConfigured]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
       signUp,
       signIn,
+      signInWithGoogle,
+      getFirebaseIdToken,
       signOut,
       resetPassword,
       changePassword,
@@ -316,6 +513,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state,
       signUp,
       signIn,
+      signInWithGoogle,
+      getFirebaseIdToken,
       signOut,
       resetPassword,
       changePassword,
@@ -348,6 +547,10 @@ function describeLocalError(code: string, email = ''): string {
     default:
       return 'Something went wrong. Please try again.';
   }
+}
+
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
 }
 
 export function useAuth(): AuthContextValue {
