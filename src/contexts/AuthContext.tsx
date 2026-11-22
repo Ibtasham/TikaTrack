@@ -22,7 +22,7 @@ import type {
   FamilyRole,
   UserProfile,
 } from '../types/auth';
-import { auth, googleAuthProvider } from '../lib/firebase';
+import { auth, googleAuthProvider, resolvedFirebaseSetup } from '../lib/firebase';
 import { deleteAllFirebaseUserDocs, ensureFirebaseAccountDocs } from '../services/cloudSync';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -248,12 +248,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       const errCode =
         error && typeof error === 'object' && 'code' in error ? String(error.code) : 'google-auth-failed';
+      const host = typeof window !== 'undefined' ? window.location.hostname : '';
+      const activeProject = resolvedFirebaseSetup.options.projectId ?? 'unknown';
+      const activeAuthDomain = resolvedFirebaseSetup.options.authDomain ?? 'unknown';
       const msg =
         errCode === 'auth/popup-closed-by-user'
           ? 'Google sign-in popup was closed before completing.'
-          : error instanceof Error
-            ? error.message
-            : 'Google sign-in failed.';
+          : errCode === 'auth/unauthorized-domain'
+            ? `Domain "${host || 'current host'}" is not authorized for Firebase project "${activeProject}" (${activeAuthDomain}). Add "${host}" under Authentication -> Settings -> Authorized domains, or configure VITE_FIREBASE_* build variables for your project.`
+            : error instanceof Error
+              ? error.message
+              : 'Google sign-in failed.';
       return { error: { code: errCode, message: msg } };
     }
   }, []);

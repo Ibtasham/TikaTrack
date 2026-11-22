@@ -1,11 +1,78 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import bundledConfig from '../../firebase-applet-config.json';
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+export interface ResolvedFirebaseSetup {
+  options: FirebaseOptions;
+  firestoreDatabaseId?: string;
+  source: 'env' | 'bundled';
+}
 
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+function readEnvString(env: Record<string, unknown>, key: string): string {
+  const value = env[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeDatabaseId(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '(default)') return undefined;
+  return trimmed;
+}
+
+export function resolveFirebaseConfig(
+  env: Record<string, unknown> = (import.meta.env ?? {}) as Record<string, unknown>,
+): ResolvedFirebaseSetup {
+  const apiKey = readEnvString(env, 'VITE_FIREBASE_API_KEY');
+  const projectId = readEnvString(env, 'VITE_FIREBASE_PROJECT_ID');
+
+  // Require both apiKey and projectId together so credentials from two different
+  // Firebase projects can never be mixed.
+  if (apiKey && projectId) {
+    const authDomain =
+      readEnvString(env, 'VITE_FIREBASE_AUTH_DOMAIN') || `${projectId}.firebaseapp.com`;
+    const storageBucket =
+      readEnvString(env, 'VITE_FIREBASE_STORAGE_BUCKET') || `${projectId}.firebasestorage.app`;
+    const messagingSenderId = readEnvString(env, 'VITE_FIREBASE_MESSAGING_SENDER_ID');
+    const appId = readEnvString(env, 'VITE_FIREBASE_APP_ID');
+    const measurementId = readEnvString(env, 'VITE_FIREBASE_MEASUREMENT_ID');
+    const explicitDbId = readEnvString(env, 'VITE_FIREBASE_DATABASE_ID');
+
+    const firestoreDatabaseId = explicitDbId
+      ? normalizeDatabaseId(explicitDbId)
+      : projectId === bundledConfig.projectId
+        ? normalizeDatabaseId(bundledConfig.firestoreDatabaseId || '')
+        : undefined;
+
+    return {
+      source: 'env',
+      firestoreDatabaseId,
+      options: {
+        apiKey,
+        authDomain,
+        projectId,
+        storageBucket,
+        ...(messagingSenderId ? { messagingSenderId } : {}),
+        ...(appId ? { appId } : {}),
+        ...(measurementId ? { measurementId } : {}),
+      },
+    };
+  }
+
+  return {
+    source: 'bundled',
+    firestoreDatabaseId: normalizeDatabaseId(bundledConfig.firestoreDatabaseId || ''),
+    options: bundledConfig,
+  };
+}
+
+export const resolvedFirebaseSetup = resolveFirebaseConfig();
+
+const app = getApps().length ? getApps()[0] : initializeApp(resolvedFirebaseSetup.options);
+
+export const db = resolvedFirebaseSetup.firestoreDatabaseId
+  ? getFirestore(app, resolvedFirebaseSetup.firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
 
