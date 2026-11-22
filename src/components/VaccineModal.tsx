@@ -47,37 +47,50 @@ export function VaccineModal({ vaccine, onClose }: VaccineModalProps) {
         className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white shadow-2xl animate-scale-in dark:border-neutral-800 dark:bg-neutral-900"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className={`relative rounded-t-2xl p-6 ${colorConfig.bg}`}>
+        {/* Clinical Header */}
+        <div className="relative overflow-hidden rounded-t-2xl border-b border-neutral-200/80 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-950/60">
+          <div className={`h-1.5 w-full ${colorConfig.bg}`} aria-hidden="true" />
           <button
             type="button"
             onClick={onClose}
             aria-label={t('common.a11y.dialogClose')}
-            className="absolute top-4 right-4 rounded-lg bg-white/20 p-2 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-white"
+            className="absolute top-4 right-4 rounded-lg border border-neutral-200/90 bg-white p-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          <div className="flex items-start gap-4 pr-10">
-            <span className="text-4xl sm:text-5xl" aria-hidden="true">
+          <div className="flex items-start gap-4 p-6 pr-14">
+            <span
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-neutral-200/90 bg-white text-2xl sm:h-14 sm:w-14 sm:text-3xl dark:border-neutral-800 dark:bg-neutral-900"
+              aria-hidden="true"
+            >
               {vaccine.icon}
             </span>
             <div className="min-w-0 flex-1">
+              <p className="eyebrow">
+                {t(`vaccines.category.${vaccine.category}`)}
+              </p>
               <h2
                 id="vaccine-modal-title"
-                className={`text-2xl font-bold sm:text-3xl ${colorConfig.text} ${isBangla ? 'font-bangla' : ''}`}
+                className={`mt-1 text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white ${isBangla ? 'font-bangla' : ''}`}
               >
                 {vaccine.name[language]}
               </h2>
-              <p className={`mt-1 text-sm ${colorConfig.text} opacity-90 ${isBangla ? 'font-bangla' : ''}`}>
+              <p className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
                 {vaccine.fullName[language]}
               </p>
-              <p className={`mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium ${colorConfig.text} opacity-95 tabular-nums`}>
-                <span>{t(`vaccines.category.${vaccine.category}`)}</span>
-                <span aria-hidden="true">·</span>
+              <p className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400">
                 <span>{t('vaccines.doses', vaccine.doses)}</span>
                 <span aria-hidden="true">·</span>
                 <span>{vaccine.introduced}</span>
+                {vaccine.efficacy && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                      {vaccine.efficacy}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -85,67 +98,64 @@ export function VaccineModal({ vaccine, onClose }: VaccineModalProps) {
 
         {/* Content */}
         <div className="space-y-5 p-6">
-          {/* Core Disease & Schedule */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+          {/* Core Disease & Schedule + Pharmacology Hairline Grid */}
+          <dl className="grid gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-2 dark:border-neutral-800 dark:bg-neutral-800">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-2 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <Heart className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" aria-hidden="true" />
                 {t('vaccines.detail.disease')}
-              </div>
-              <p className={`mt-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
+              </dt>
+              <dd className={`mt-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
                 {vaccine.disease[language]}
-              </p>
+              </dd>
             </div>
 
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/50">
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-2 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <Calendar className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 {t('vaccines.detail.schedule')}
-              </div>
-              <p className={`mt-1.5 text-sm font-medium text-neutral-900 tabular-nums dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
+              </dt>
+              <dd className={`mt-1.5 text-sm font-medium text-neutral-900 tabular-nums dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}>
                 {vaccine.schedule[language]}
-              </p>
+              </dd>
             </div>
-          </div>
 
-          {/* Pharmacology & Administration Specs */}
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
-              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <FlaskConical className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 {t('vaccines.detail.platform')}
               </dt>
-              <dd className={`mt-1 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+              <dd className={`mt-1.5 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                 {clinical.platform[language]}
               </dd>
             </div>
 
-            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
-              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <Syringe className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 {t('vaccines.detail.route')}
               </dt>
-              <dd className={`mt-1 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+              <dd className={`mt-1.5 text-sm text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                 {clinical.route[language]} · <span className="font-mono text-xs tabular-nums">{clinical.doseVolume[language]}</span>
               </dd>
             </div>
 
-            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
-              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <Snowflake className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" aria-hidden="true" />
                 {t('vaccines.detail.coldChain')}
               </dt>
-              <dd className={`mt-1 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+              <dd className={`mt-1.5 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                 {clinical.coldChain[language]}
               </dd>
             </div>
 
-            <div className="rounded-xl border border-neutral-200 p-3.5 dark:border-neutral-800">
-              <dt className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400">
+            <div className="bg-white p-4 dark:bg-neutral-900">
+              <dt className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
                 <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 {t('vaccines.efficacy')}
               </dt>
-              <dd className={`mt-1 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
+              <dd className={`mt-1.5 text-sm text-neutral-800 tabular-nums dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                 <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{vaccine.efficacy}</span> — {clinical.immunityProfile[language]}
               </dd>
             </div>

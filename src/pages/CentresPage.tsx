@@ -97,13 +97,13 @@ const CentreCard = memo(function CentreCard({
   const Icon = TYPE_ICONS[centre.type] ?? Building2;
   return (
     <li
-      className={`card-padded flex flex-col gap-3 transition-shadow ${
-        isSelected ? 'ring-2 ring-emerald-500 dark:ring-emerald-400' : ''
+      className={`card-padded flex flex-col gap-3 transition-colors ${
+        isSelected ? 'border-emerald-600 dark:border-emerald-400' : ''
       }`}
     >
       <div className="flex items-start gap-3">
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300"
           aria-hidden="true"
         >
           <Icon className="h-5 w-5" />
@@ -114,29 +114,41 @@ const CentreCard = memo(function CentreCard({
           >
             {centre.name[language] || centre.name.en}
           </h2>
-          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-            <span className="badge-neutral">{t(`centres.type.${centre.type}`)}</span>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+            <span className="font-semibold text-neutral-700 dark:text-neutral-200">
+              {t(`centres.type.${centre.type}`)}
+            </span>
+            <span aria-hidden="true">·</span>
             <span>
-              {centre.district} · {centre.division}
+              {centre.district}, {centre.division}
             </span>
             {distanceKm !== null && (
-              <span className="badge-upcoming tabular-nums">
-                {t('centres.away', formatDistanceKm(distanceKm, language))}
-              </span>
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="font-semibold text-sky-700 tabular-nums dark:text-sky-400">
+                  {t('centres.away', formatDistanceKm(distanceKm, language))}
+                </span>
+              </>
             )}
             {activeRouteForCard && (
-              <span className="badge-done tabular-nums">
-                <Navigation className="h-3 w-3" aria-hidden="true" />
-                {activeRouteForCard.durationText} · {activeRouteForCard.distanceText}
-              </span>
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
+                  <Navigation className="h-3 w-3" aria-hidden="true" />
+                  {activeRouteForCard.durationText} ({activeRouteForCard.distanceText})
+                </span>
+              </>
             )}
+            <span aria-hidden="true">·</span>
             {centre.verified ? (
-              <span className="badge-done">
+              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
                 <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                 {t('centres.verified')}
               </span>
             ) : (
-              <span className="badge-due">{t('centres.unverified')}</span>
+              <span className="font-medium text-amber-700 dark:text-amber-400">
+                {t('centres.unverified')}
+              </span>
             )}
           </p>
         </div>
@@ -202,18 +214,12 @@ const CentreCard = memo(function CentreCard({
       )}
 
       {centre.services.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            {t('centres.services')}
-          </p>
-          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-            {centre.services.map((service) => (
-              <li key={service} className="badge-neutral">
-                {service}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <p className="text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
+          <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+            {t('centres.services')}:{' '}
+          </span>
+          {centre.services.join(' · ')}
+        </p>
       )}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
@@ -635,10 +641,10 @@ export default function CentresPage() {
 
   return (
     <div className="page-shell">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <div>
-          <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-            <MapPin className="h-4 w-4" aria-hidden="true" />
+          <p className="eyebrow">
+            <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
             {t('nav.centres')}
           </p>
           <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -653,7 +659,7 @@ export default function CentresPage() {
         <div
           role="group"
           aria-label={t('centres.map.heading')}
-          className="no-print inline-flex rounded-xl border border-neutral-200 bg-white p-1 shadow-xs dark:border-neutral-800 dark:bg-neutral-900"
+          className="no-print segmented-group"
         >
           {(
             [
@@ -667,10 +673,8 @@ export default function CentresPage() {
               type="button"
               onClick={() => setViewMode(id)}
               aria-pressed={viewMode === id}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                viewMode === id
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+              className={`segmented-tab whitespace-nowrap shrink-0 ${
+                viewMode === id ? 'segmented-tab-active' : ''
               }`}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -786,7 +790,7 @@ export default function CentresPage() {
           </div>
         </div>
 
-        {/* Quick division chips */}
+        {/* Quick division filter strip */}
         <div className="mt-3 flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -794,10 +798,10 @@ export default function CentresPage() {
               setDivision('all');
               setDistrict('all');
             }}
-            className={`chip ${
+            className={`chip border ${
               division === 'all'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200'
+                ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-600 dark:bg-emerald-600'
+                : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
             }`}
           >
             {t('centres.allDivisions')}
@@ -810,10 +814,10 @@ export default function CentresPage() {
                 setDivision(div);
                 setDistrict('all');
               }}
-              className={`chip ${
+              className={`chip border tabular-nums ${
                 division === div
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200'
+                  ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-600 dark:bg-emerald-600'
+                  : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
               }`}
             >
               {div} ({divisionCounts[div] ?? 0})

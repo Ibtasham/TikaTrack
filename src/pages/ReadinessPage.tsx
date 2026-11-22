@@ -101,27 +101,16 @@ export default function ReadinessPage() {
     <div className="page-shell space-y-8">
       {/* Header */}
       <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
-        <p
-          className={`text-xs font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400 ${
-            isBangla ? 'font-bangla' : ''
-          }`}
-        >
+        <p className={`eyebrow ${isBangla ? 'font-bangla' : ''}`}>
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
           {t('readiness.eyebrow')}
         </p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-3xl">
-            <h1
-              className={`text-2xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl dark:text-white ${
-                isBangla ? 'font-bangla' : ''
-              }`}
-            >
+            <h1 className={`section-title ${isBangla ? 'font-bangla' : ''}`}>
               {t('readiness.title')}
             </h1>
-            <p
-              className={`mt-2 text-sm leading-relaxed text-neutral-600 sm:text-base dark:text-neutral-300 ${
-                isBangla ? 'font-bangla' : ''
-              }`}
-            >
+            <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
               {t('readiness.subtitle')}
             </p>
           </div>
@@ -169,9 +158,9 @@ export default function ReadinessPage() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleScenario(scenario.id)}
-                className={`flex h-full flex-col items-start rounded-2xl border p-4 text-left transition-all ${
+                className={`flex h-full cursor-pointer flex-col items-start rounded-xl border p-4 text-left transition-colors ${
                   active
-                    ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/50'
+                    ? 'border-emerald-600 bg-emerald-50/60 dark:border-emerald-500 dark:bg-emerald-950/40'
                     : 'border-neutral-200 bg-white hover:border-emerald-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-emerald-800'
                 }`}
               >
@@ -245,7 +234,7 @@ export default function ReadinessPage() {
             id="readiness-member-select"
             value={selectedProfileId}
             onChange={(e) => setSelectedProfileId(e.target.value)}
-            className="input mt-1.5"
+            className="input-field mt-1"
           >
             <option value="">{t('readiness.memberGuest')}</option>
             {profiles.map((member) => (
@@ -269,7 +258,7 @@ export default function ReadinessPage() {
             type="date"
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}
-            className="input mt-1.5"
+            className="input-field mt-1"
           />
           <p className={`mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
             {t('readiness.targetDateHint')}
@@ -286,30 +275,30 @@ export default function ReadinessPage() {
         </div>
       ) : (
         <>
-          {/* Summary Strip */}
-          <dl className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <dt className={`text-xs font-medium text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+          {/* Summary Strip (unified hairline grid) */}
+          <dl className="grid gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-3 dark:border-neutral-800 dark:bg-neutral-800">
+            <div className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
+              <dt className={`stat-label ${isBangla ? 'font-bangla' : ''}`}>
                 {t('readiness.summaryTotal')}
               </dt>
-              <dd className="mt-1 text-2xl font-bold tabular-nums text-neutral-900 dark:text-white">
+              <dd className="stat-value mt-1">
                 {localiseNumber(evaluation.items.length, language)}
               </dd>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <dt className={`text-xs font-medium text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+            <div className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
+              <dt className={`stat-label ${isBangla ? 'font-bangla' : ''}`}>
                 {t('readiness.summaryRecorded')}
               </dt>
-              <dd className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <dd className="stat-value mt-1 text-emerald-700 dark:text-emerald-400">
                 {localiseNumber(evaluation.recordedCount, language)}
               </dd>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <dt className={`text-xs font-medium text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+            <div className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
+              <dt className={`stat-label ${isBangla ? 'font-bangla' : ''}`}>
                 {t('readiness.summaryNeeded')}
               </dt>
               <dd
-                className={`mt-1 text-2xl font-bold tabular-nums ${
+                className={`stat-value mt-1 ${
                   evaluation.neededCount > 0
                     ? 'text-amber-700 dark:text-amber-400'
                     : 'text-emerald-700 dark:text-emerald-400'

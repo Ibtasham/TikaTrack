@@ -362,23 +362,23 @@ export default function TikabotPage() {
   const band = (confidence?: number) =>
     confidence === undefined ? 'low' : confidenceBand(confidence);
 
-  const bandClass = (confidence?: number) => {
+  const bandTextClass = (confidence?: number) => {
     switch (band(confidence)) {
       case 'high':
-        return 'badge-done';
+        return 'text-emerald-700 dark:text-emerald-400';
       case 'medium':
-        return 'badge-upcoming';
+        return 'text-sky-700 dark:text-sky-400';
       default:
-        return 'badge-due';
+        return 'text-amber-700 dark:text-amber-400';
     }
   };
 
   return (
     <div className="page-shell max-w-5xl">
-      <header className="no-print flex flex-wrap items-end justify-between gap-4">
+      <header className="no-print flex flex-wrap items-end justify-between gap-4 border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <div>
-          <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-            <Bot className="h-4 w-4" aria-hidden="true" />
+          <p className="eyebrow">
+            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
             {t('nav.tikabot')}
           </p>
           <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -391,7 +391,7 @@ export default function TikabotPage() {
 
         {/* Clean 3-tab Studio Workspace Switcher */}
         <div
-          className="inline-flex rounded-xl border border-neutral-200 bg-white p-1 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+          className="segmented-group"
           role="tablist"
           aria-label={t('tikabot.studioTabs')}
         >
@@ -400,11 +400,7 @@ export default function TikabotPage() {
             role="tab"
             aria-selected={studioTab === 'chat'}
             onClick={() => setStudioTab('chat')}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              studioTab === 'chat'
-                ? 'bg-emerald-600 text-white'
-                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
-            }`}
+            className={`segmented-tab ${studioTab === 'chat' ? 'segmented-tab-active' : ''}`}
           >
             <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
             <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.chat')}</span>
@@ -414,11 +410,7 @@ export default function TikabotPage() {
             role="tab"
             aria-selected={studioTab === 'voice'}
             onClick={() => setStudioTab('voice')}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              studioTab === 'voice'
-                ? 'bg-emerald-600 text-white'
-                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
-            }`}
+            className={`segmented-tab ${studioTab === 'voice' ? 'segmented-tab-active' : ''}`}
           >
             <Mic className="h-3.5 w-3.5" aria-hidden="true" />
             <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.voice')}</span>
@@ -428,11 +420,7 @@ export default function TikabotPage() {
             role="tab"
             aria-selected={studioTab === 'studio'}
             onClick={() => setStudioTab('studio')}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              studioTab === 'studio'
-                ? 'bg-emerald-600 text-white'
-                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
-            }`}
+            className={`segmented-tab ${studioTab === 'studio' ? 'segmented-tab-active' : ''}`}
           >
             <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
             <span className={isBangla ? 'font-bangla' : undefined}>{t('tikabot.tab.studio')}</span>
@@ -448,16 +436,12 @@ export default function TikabotPage() {
         {studioTab === 'chat' && (
           <div className="flex h-[70vh] min-h-[34rem] flex-col">
             {/* Engine + Reasoning Tier Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/70 px-4 py-2.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/80">
-              <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/70 px-4 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/80">
+              <div className="segmented-group">
                 <button
                   type="button"
                   onClick={() => setEngine('gemini')}
-                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 font-semibold transition-colors ${
-                    engine === 'gemini'
-                      ? 'bg-emerald-600 text-white'
-                      : 'border border-neutral-200 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
-                  }`}
+                  className={`segmented-tab ${engine === 'gemini' ? 'segmented-tab-active' : ''}`}
                 >
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{t('tikabot.engine.gemini')}</span>
@@ -465,11 +449,7 @@ export default function TikabotPage() {
                 <button
                   type="button"
                   onClick={() => setEngine('offline')}
-                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 font-semibold transition-colors ${
-                    engine === 'offline'
-                      ? 'bg-emerald-600 text-white'
-                      : 'border border-neutral-200 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
-                  }`}
+                  className={`segmented-tab ${engine === 'offline' ? 'segmented-tab-active' : ''}`}
                 >
                   <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{t('tikabot.engine.offline')}</span>
@@ -478,17 +458,13 @@ export default function TikabotPage() {
 
               {engine === 'gemini' && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-800">
+                  <div className="segmented-group">
                     {(['fast', 'balanced', 'deep'] as const).map((modeOption) => (
                       <button
                         key={modeOption}
                         type="button"
                         onClick={() => setTier(modeOption)}
-                        className={`rounded-md px-2 py-1 font-medium whitespace-nowrap transition-colors ${
-                          tier === modeOption
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
-                        }`}
+                        className={`segmented-tab ${tier === modeOption ? 'segmented-tab-active' : ''}`}
                       >
                         {t(`tikabot.tier.${modeOption}`)}
                       </button>
@@ -500,7 +476,7 @@ export default function TikabotPage() {
                       type="button"
                       onClick={() => setUseSearch((v) => !v)}
                       aria-pressed={useSearch}
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium whitespace-nowrap transition-colors ${
+                      className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium whitespace-nowrap transition-colors ${
                         useSearch
                           ? 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-200'
                           : 'border-neutral-200 bg-white text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
@@ -653,13 +629,13 @@ export default function TikabotPage() {
                       )}
 
                       {!isUser && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-700">
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-neutral-200 pt-2 dark:border-neutral-700">
                           {bot.confidence !== undefined && (
                             <span
-                              className={bandClass(bot.confidence)}
+                              className={`status-inline tabular-nums ${bandTextClass(bot.confidence)}`}
                               title={`${t('tikabot.confidence')}: ${Math.round(bot.confidence * 100)}%`}
                             >
-                              <Sparkles className="h-3 w-3" aria-hidden="true" />
+                              <Sparkles className="h-3 w-3 shrink-0" aria-hidden="true" />
                               {t('tikabot.confidence')} {Math.round(bot.confidence * 100)}%
                             </span>
                           )}
@@ -903,7 +879,7 @@ export default function TikabotPage() {
           </p>
         </div>
 
-        <div className="card-padded border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
+        <div className="card-padded border-amber-200/80 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20">
           <h2
             className={`flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
           >
@@ -915,8 +891,8 @@ export default function TikabotPage() {
           >
             {t('tracker.medicalAdvice')}
           </p>
-          <a href="tel:16263" className="btn mt-4 bg-amber-600 text-white hover:bg-amber-700">
-            <Phone className="h-4 w-4" aria-hidden="true" />
+          <a href="tel:16263" className="btn-secondary btn-sm mt-4 border-amber-300 text-amber-900 hover:bg-amber-100/70 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/60">
+            <Phone className="h-3.5 w-3.5" aria-hidden="true" />
             16263
           </a>
         </div>

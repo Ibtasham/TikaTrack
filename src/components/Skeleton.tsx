@@ -4,20 +4,20 @@ interface SkeletonProps {
 
 export function Skeleton({ className = '' }: SkeletonProps) {
   return (
-    <div className={`animate-pulse bg-neutral-200 dark:bg-neutral-700 rounded ${className}`}></div>
+    <div className={`animate-pulse rounded bg-neutral-200/80 dark:bg-neutral-800 ${className}`} />
   );
 }
 
 export function CardSkeleton() {
   return (
-    <div className="glass rounded-2xl p-6 space-y-4">
-      <Skeleton className="h-12 w-12 rounded-xl" />
-      <Skeleton className="h-6 w-3/4" />
+    <div className="card-padded space-y-4">
+      <Skeleton className="h-10 w-10 rounded-lg" />
+      <Skeleton className="h-5 w-3/4" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-5/6" />
       <div className="grid grid-cols-2 gap-3">
-        <Skeleton className="h-20 rounded-xl" />
-        <Skeleton className="h-20 rounded-xl" />
+        <Skeleton className="h-16 rounded-lg" />
+        <Skeleton className="h-16 rounded-lg" />
       </div>
     </div>
   );
@@ -25,13 +25,13 @@ export function CardSkeleton() {
 
 export function VaccineCardSkeleton() {
   return (
-    <div className="glass rounded-2xl overflow-hidden">
-      <Skeleton className="h-32 w-full" />
-      <div className="p-6 space-y-3">
-        <Skeleton className="h-6 w-1/2" />
+    <div className="card overflow-hidden">
+      <div className="space-y-3 p-5 sm:p-6">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-6 w-2/3" />
         <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-10 w-full rounded-xl" />
+        <Skeleton className="h-4 w-4/5" />
+        <Skeleton className="h-9 w-full rounded-lg" />
       </div>
     </div>
   );
@@ -39,16 +39,16 @@ export function VaccineCardSkeleton() {
 
 export function CentreCardSkeleton() {
   return (
-    <div className="glass rounded-2xl p-6 space-y-4">
-      <Skeleton className="h-8 w-3/4" />
+    <div className="card-padded space-y-4">
+      <Skeleton className="h-6 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
       <div className="space-y-2">
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-5/6" />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Skeleton className="h-8 rounded-lg" />
-        <Skeleton className="h-8 rounded-lg" />
+        <Skeleton className="h-9 rounded-lg" />
+        <Skeleton className="h-9 rounded-lg" />
       </div>
     </div>
   );
@@ -56,9 +56,6 @@ export function CentreCardSkeleton() {
 
 /**
  * Full-page placeholder shown while a lazy route's chunk is loading.
- *
- * Deliberately shaped like a real page (title, subtitle, toolbar, card grid) so
- * the layout does not jump when the content arrives.
  */
 export function PageSkeleton() {
   return (

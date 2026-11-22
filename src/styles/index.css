@@ -9,13 +9,9 @@
 
 /* ---------------------------------------------------------------------------
  * Design tokens
- *
- * Only the shades the app actually uses are declared. Tailwind v4 still ships
- * its full default palette, so `bg-emerald-400` etc. keep working — these
- * entries exist to pin the brand colours and to add the two custom surfaces.
  * ------------------------------------------------------------------------- */
 @theme {
-  /* Brand — emerald/teal ramp used by buttons, links and the vaccine cards. */
+  /* Brand — clinical emerald/teal ramp used across primary actions and telemetry. */
   --color-brand-50: #ecfdf5;
   --color-brand-100: #d1fae5;
   --color-brand-200: #a7f3d0;
@@ -29,8 +25,8 @@
   --color-brand-950: #022c22;
 
   /* Surfaces. */
-  --color-surface: #fefdfb;
-  --color-surface-dark: #0b1f1a;
+  --color-surface: #fafaf8;
+  --color-surface-dark: #091512;
   --color-ink: #171717;
   --color-ink-dark: #f5f5f5;
 
@@ -43,11 +39,8 @@
   /*
    * Fonts.
    *
-   * TikaTrack deliberately does NOT fetch web fonts: Bangladeshi mobile
-   * connections are often metered, and a vaccination reference should render
-   * instantly offline. These stacks prefer an installed Bangla face and fall
-   * back to the platform UI font. See docs/LOCALISATION.md for how to opt into
-   * a self-hosted web font.
+   * TikaTrack deliberately prefers local platform stacks so metered mobile
+   * connections render immediately offline.
    */
   --font-sans:
     'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
@@ -57,10 +50,10 @@
     'Nirmala UI', var(--font-sans);
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
-  --radius-card: 0.875rem;
+  --radius-card: 0.75rem;
 
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px -12px rgb(15 23 42 / 0.18);
-  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.08), 0 16px 40px -16px rgb(15 23 42 / 0.28);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-card-hover: 0 4px 16px -6px rgb(15 23 42 / 0.1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -74,11 +67,6 @@
     -webkit-text-size-adjust: 100%;
   }
 
-  /*
-   * Text size is a user preference, not a zoom level: scaling the root font
-   * size keeps every rem-based utility (spacing included) in proportion, and
-   * survives a reload because index.html applies it before first paint.
-   */
   :root[data-text-size='large'] {
     font-size: 106.25%;
   }
@@ -101,12 +89,11 @@
   }
 
   body {
-    @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-surface-dark dark:text-ink-dark;
+    @apply bg-surface text-neutral-900 antialiased dark:bg-surface-dark dark:text-ink-dark;
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
   }
 
-  /* Any element rendering Bangla gets a face with proper conjunct shaping. */
   .font-bangla,
   [lang='bn'] {
     font-family: var(--font-bangla);
@@ -116,7 +103,6 @@
     @apply outline-2 outline-offset-2 outline-emerald-600 dark:outline-emerald-400;
   }
 
-  /* Form controls need explicit dark styling — browsers do not inherit it. */
   input,
   select,
   textarea {
@@ -128,57 +114,45 @@
     @apply text-neutral-400 dark:text-neutral-500;
   }
 
-  /* Tables inside cards should scroll rather than break the layout on phones. */
   .table-scroll {
     @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
   }
 }
 
 /* ---------------------------------------------------------------------------
- * Components
- *
- * These are the only class names pages should reach for, so a redesign is a
- * one-file change.
- * ------------------------------------------------------------------------- */
-/* ---------------------------------------------------------------------------
- * Composable bases.
- *
- * Tailwind v4 only lets `@apply` reference *utilities* — not classes defined in
- * `@layer components`. These four are the bases other component classes build
- * on, so they are registered with `@utility` (which also keeps them usable
- * directly in markup). `card-padded` inlines `card` rather than applying it,
- * because a custom utility may not `@apply` another custom utility.
+ * Composable utilities
  * ------------------------------------------------------------------------- */
 @utility btn {
-  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all;
+  @apply inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors;
   @apply disabled:pointer-events-none disabled:opacity-50;
 }
 
 @utility card {
-  @apply rounded-[var(--radius-card)] border border-neutral-200/80 bg-white shadow-[var(--shadow-card)];
-  @apply dark:border-neutral-800 dark:bg-neutral-900;
+  @apply rounded-[var(--radius-card)] border border-neutral-200/90 bg-white shadow-[var(--shadow-card)];
+  @apply dark:border-neutral-800 dark:bg-neutral-900/95;
 }
 
 @utility card-padded {
-  @apply rounded-[var(--radius-card)] border border-neutral-200/80 bg-white shadow-[var(--shadow-card)];
-  @apply dark:border-neutral-800 dark:bg-neutral-900;
+  @apply rounded-[var(--radius-card)] border border-neutral-200/90 bg-white shadow-[var(--shadow-card)];
+  @apply dark:border-neutral-800 dark:bg-neutral-900/95;
   @apply p-5 sm:p-6;
 }
 
 @utility badge {
-  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-tight;
 }
 
 @layer components {
   .btn-primary {
-    @apply btn bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md;
-    @apply hover:shadow-lg hover:brightness-110 active:brightness-95;
+    @apply btn bg-emerald-700 text-white shadow-xs;
+    @apply hover:bg-emerald-800 active:bg-emerald-900;
+    @apply dark:bg-emerald-600 dark:hover:bg-emerald-500 dark:active:bg-emerald-700;
   }
 
   .btn-secondary {
-    @apply btn border-2 border-emerald-200 bg-white text-emerald-700;
-    @apply hover:border-emerald-300 hover:bg-emerald-50;
-    @apply dark:border-emerald-900 dark:bg-neutral-900 dark:text-emerald-300 dark:hover:bg-neutral-800;
+    @apply btn border border-neutral-300 bg-white text-neutral-800 shadow-xs;
+    @apply hover:border-neutral-400 hover:bg-neutral-50;
+    @apply dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800;
   }
 
   .btn-ghost {
@@ -187,46 +161,70 @@
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white shadow-md hover:bg-red-700;
+    @apply btn bg-red-600 text-white shadow-xs hover:bg-red-700;
     @apply dark:bg-red-700 dark:hover:bg-red-600;
   }
 
   .btn-sm {
-    @apply px-3 py-1.5 text-xs;
+    @apply rounded-lg px-3 py-1.5 text-xs;
   }
 
   .card-hover {
-    @apply card transition-shadow hover:shadow-[var(--shadow-card-hover)];
+    @apply card transition-all hover:border-neutral-300 hover:shadow-[var(--shadow-card-hover)] dark:hover:border-neutral-700;
+  }
+
+  .surface-subtle {
+    @apply rounded-xl border border-neutral-200/80 bg-neutral-50/80 dark:border-neutral-800 dark:bg-neutral-900/60;
+  }
+
+  .segmented-group {
+    @apply inline-flex flex-wrap items-center gap-1 rounded-lg border border-neutral-200/90 bg-neutral-100/80 p-1 dark:border-neutral-800 dark:bg-neutral-900;
+  }
+
+  .segmented-tab {
+    @apply inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white;
+  }
+
+  .segmented-tab-active {
+    @apply bg-white text-neutral-900 shadow-xs dark:bg-neutral-800 dark:text-white;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm;
-    @apply transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none;
-    @apply dark:border-neutral-700 dark:bg-neutral-900;
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm;
+    @apply transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 focus:outline-none;
+    @apply dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/20;
   }
 
   .label {
-    @apply mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300;
+    @apply mb-1.5 block text-xs font-semibold tracking-wide text-neutral-700 dark:text-neutral-300;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400;
   }
 
   .badge-done {
-    @apply badge bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300;
+    @apply badge border border-emerald-200/80 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300;
   }
 
   .badge-due {
-    @apply badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300;
+    @apply badge border border-amber-200/80 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/60 dark:text-amber-300;
   }
 
   .badge-overdue {
-    @apply badge bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300;
+    @apply badge border border-red-200/80 bg-red-50 text-red-800 dark:border-red-900/70 dark:bg-red-950/60 dark:text-red-300;
   }
 
   .badge-upcoming {
-    @apply badge bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300;
+    @apply badge border border-sky-200/80 bg-sky-50 text-sky-800 dark:border-sky-900/70 dark:bg-sky-950/60 dark:text-sky-300;
   }
 
   .badge-neutral {
-    @apply badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300;
+    @apply badge border border-neutral-200/80 bg-neutral-100/80 text-neutral-700 dark:border-neutral-700/70 dark:bg-neutral-800 dark:text-neutral-300;
+  }
+
+  .status-inline {
+    @apply inline-flex items-center gap-1.5 text-xs font-semibold;
   }
 
   .section-title {
@@ -234,26 +232,25 @@
   }
 
   .section-subtitle {
-    @apply mt-2 max-w-2xl text-base text-neutral-600 dark:text-neutral-400;
+    @apply mt-2 max-w-2xl text-sm leading-relaxed text-neutral-600 sm:text-base dark:text-neutral-400;
   }
 
   .page-shell {
-    @apply mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8;
+    @apply mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8;
   }
 
   .link {
     @apply font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400;
   }
 
-  /* A link that behaves as a button (mode switches, "view all" toggles). */
   .btn-link {
     @apply cursor-pointer rounded font-medium text-emerald-700 underline-offset-2 transition-colors;
     @apply hover:text-emerald-800 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300;
   }
 
-  /* Small pill toggle — reminder lead times, filter tags. */
+  /* Compact interactive filter control. */
   .chip {
-    @apply inline-flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors;
+    @apply inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
@@ -267,51 +264,31 @@
   }
 
   .stat-label {
-    @apply text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400;
+    @apply text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400;
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-neutral-900 tabular-nums sm:text-3xl dark:text-white;
+    @apply text-2xl font-bold tracking-tight text-neutral-900 tabular-nums sm:text-3xl dark:text-white;
   }
 
   .glass {
-    @apply border border-white/40 bg-white/70 shadow-lg backdrop-blur-xl;
-    @apply dark:border-white/10 dark:bg-neutral-900/70;
+    @apply border border-neutral-200/80 bg-white/85 shadow-xs backdrop-blur-md;
+    @apply dark:border-neutral-800 dark:bg-neutral-900/85;
   }
 
   .sr-only-focusable {
-    @apply sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-100 focus:rounded-lg focus:bg-emerald-600 focus:px-4 focus:py-2 focus:text-white;
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-100 focus:rounded-lg focus:bg-emerald-700 focus:px-4 focus:py-2 focus:text-white;
   }
 }
 
 /* ---------------------------------------------------------------------------
- * Animations
+ * Animations (restrained & purposeful)
  * ------------------------------------------------------------------------- */
 @layer utilities {
-  @keyframes tt-float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-14px);
-    }
-  }
-
-  @keyframes tt-pulse-soft {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 0.85;
-    }
-  }
-
   @keyframes tt-slide-up {
     from {
       opacity: 0;
-      transform: translateY(20px);
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
@@ -322,7 +299,7 @@
   @keyframes tt-slide-in-right {
     from {
       opacity: 0;
-      transform: translateX(20px);
+      transform: translateX(12px);
     }
     to {
       opacity: 1;
@@ -333,7 +310,7 @@
   @keyframes tt-scale-in {
     from {
       opacity: 0;
-      transform: scale(0.96);
+      transform: scale(0.97);
     }
     to {
       opacity: 1;
@@ -350,55 +327,22 @@
     }
   }
 
-  .animate-float {
-    animation: tt-float 6s ease-in-out infinite;
-  }
-  .animate-float-delayed {
-    animation: tt-float 8s ease-in-out 1s infinite;
-  }
-  .animate-pulse-soft {
-    animation: tt-pulse-soft 3s ease-in-out infinite;
-  }
   .animate-slide-up {
-    animation: tt-slide-up 0.45s ease-out both;
+    animation: tt-slide-up 0.28s ease-out both;
   }
   .animate-slide-in-right {
-    animation: tt-slide-in-right 0.35s ease-out both;
+    animation: tt-slide-in-right 0.24s ease-out both;
   }
   .animate-scale-in {
-    animation: tt-scale-in 0.25s ease-out both;
+    animation: tt-scale-in 0.18s ease-out both;
   }
   .animate-fade-in {
-    animation: tt-fade-in 0.3s ease-out both;
-  }
-
-  /* Stagger helper for card grids; the delay scale is small on purpose. */
-  .stagger-1 {
-    animation-delay: 60ms;
-  }
-  .stagger-2 {
-    animation-delay: 120ms;
-  }
-  .stagger-3 {
-    animation-delay: 180ms;
-  }
-  .stagger-4 {
-    animation-delay: 240ms;
-  }
-  .stagger-5 {
-    animation-delay: 300ms;
-  }
-  .stagger-6 {
-    animation-delay: 360ms;
+    animation: tt-fade-in 0.22s ease-out both;
   }
 }
 
 /* ---------------------------------------------------------------------------
  * Print
- *
- * The schedule, tracker, analytics and passport pages all offer "Print". Only
- * the marked subtree should reach the paper — headers, nav and controls must
- * not.
  * ------------------------------------------------------------------------- */
 @media print {
   @page {

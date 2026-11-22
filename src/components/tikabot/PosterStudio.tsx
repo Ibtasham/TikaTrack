@@ -301,13 +301,13 @@ export function PosterStudio() {
               <Palette className="h-3.5 w-3.5" aria-hidden="true" />
               {t('tikabot.studio.theme')}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="segmented-group">
               {(['clinical', 'campaign', 'dark'] as const).map((themeId) => (
                 <button
                   key={themeId}
                   type="button"
                   onClick={() => setCardTheme(themeId)}
-                  className={`btn btn-sm ${cardTheme === themeId ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`segmented-tab ${cardTheme === themeId ? 'segmented-tab-active' : ''}`}
                 >
                   {t(`tikabot.studio.theme.${themeId}`)}
                 </button>

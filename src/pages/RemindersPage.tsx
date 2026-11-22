@@ -407,9 +407,9 @@ export default function RemindersPage() {
 
   return (
     <div className="page-shell max-w-5xl">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
-          <BellRing className="h-4 w-4" aria-hidden="true" />
+      <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
           {t('nav.reminders')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -463,31 +463,31 @@ export default function RemindersPage() {
         </div>
       </header>
 
-      {/* --- Stats ------------------------------------------------------- */}
-      <div className="stat-grid mt-6">
-        <div className="stat-card">
-          <span className="stat-label">{t('reminders.stats.total')}</span>
-          <strong className="stat-value">{localiseNumber(stats.total, language)}</strong>
+      {/* --- Stats (unified hairline strip) ------------------------------ */}
+      <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-800">
+        <div className="bg-white p-4 dark:bg-neutral-900">
+          <dt className="stat-label">{t('reminders.stats.total')}</dt>
+          <dd className="stat-value mt-1">{localiseNumber(stats.total, language)}</dd>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">{t('reminders.stats.today')}</span>
-          <strong className="stat-value text-amber-600 dark:text-amber-400">
+        <div className="bg-white p-4 dark:bg-neutral-900">
+          <dt className="stat-label">{t('reminders.stats.today')}</dt>
+          <dd className="stat-value mt-1 text-amber-600 dark:text-amber-400">
             {localiseNumber(grouped.dueToday.length, language)}
-          </strong>
+          </dd>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">{t('reminders.stats.overdue')}</span>
-          <strong className="stat-value text-red-600 dark:text-red-400">
+        <div className="bg-white p-4 dark:bg-neutral-900">
+          <dt className="stat-label">{t('reminders.stats.overdue')}</dt>
+          <dd className="stat-value mt-1 text-red-600 dark:text-red-400">
             {localiseNumber(grouped.overdue.length, language)}
-          </strong>
+          </dd>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">{t('reminders.group.done')}</span>
-          <strong className="stat-value text-emerald-600 dark:text-emerald-400">
+        <div className="bg-white p-4 dark:bg-neutral-900">
+          <dt className="stat-label">{t('reminders.group.done')}</dt>
+          <dd className="stat-value mt-1 text-emerald-600 dark:text-emerald-400">
             {localiseNumber(grouped.done.length, language)}
-          </strong>
+          </dd>
         </div>
-      </div>
+      </dl>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         {/* --- List -------------------------------------------------------- */}
@@ -553,30 +553,38 @@ export default function RemindersPage() {
                       <CalendarClock className="h-4 w-4" aria-hidden="true" />
                     )}
                     {group === 'done' && <Check className="h-4 w-4" aria-hidden="true" />}
-                    {t(`reminders.group.${group}`)}
-                    <span className="rounded-full bg-white/60 px-2 py-0.5 text-xs font-semibold dark:bg-neutral-800">
-                      {localiseNumber(items.length, language)}
+                    {t(`reminders.group.${group}`)}{' '}
+                    <span className="font-normal text-neutral-500 tabular-nums dark:text-neutral-400">
+                      ({localiseNumber(items.length, language)})
                     </span>
                   </h2>
 
-                  <ul className="mt-3 space-y-2">
+                  <ul
+                    className={`mt-3 divide-y divide-neutral-100 overflow-hidden rounded-xl border bg-white dark:divide-neutral-800 dark:bg-neutral-900 ${
+                      group === 'overdue'
+                        ? 'border-red-200/90 dark:border-red-900/60'
+                        : group === 'dueToday'
+                          ? 'border-amber-200/90 dark:border-amber-900/60'
+                          : 'border-neutral-200/90 dark:border-neutral-800'
+                    }`}
+                  >
                     {items.map((reminder) => {
                       const name = vaccineName.get(reminder.vaccineId);
                       const dueDate = parseISODate(reminder.scheduledDate);
                       const delta = dueDate ? daysBetween(startOfToday(), dueDate) : 0;
-                      const tone =
+                      const accentBar =
                         group === 'overdue'
-                          ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+                          ? 'border-l-2 border-l-red-500'
                           : group === 'dueToday'
-                            ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
+                            ? 'border-l-2 border-l-amber-500'
                             : group === 'done'
-                              ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20'
-                              : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900';
+                              ? 'border-l-2 border-l-emerald-500 opacity-85'
+                              : '';
 
                       return (
                         <li
                           key={reminder.id}
-                          className={`flex flex-wrap items-start gap-3 rounded-xl border p-3.5 ${tone}`}
+                          className={`flex flex-wrap items-start gap-3 px-4 py-3.5 ${accentBar}`}
                         >
                           <div className="min-w-0 flex-1">
                             <p
@@ -598,14 +606,14 @@ export default function RemindersPage() {
                                 'reminders.item.profile',
                                 profileName.get(reminder.profileId) ?? '—',
                               )}{' '}
-                              · {formatDate(reminder.scheduledDate, language)}
+                              · <span className="tabular-nums">{formatDate(reminder.scheduledDate, language)}</span>
                             </p>
                             <p
                               className={`mt-1 flex items-center gap-1 text-xs font-medium ${
                                 group === 'overdue'
-                                  ? 'text-red-700 dark:text-red-300'
+                                  ? 'text-red-700 dark:text-red-400'
                                   : group === 'dueToday'
-                                    ? 'text-amber-700 dark:text-amber-300'
+                                    ? 'text-amber-700 dark:text-amber-400'
                                     : 'text-neutral-500 dark:text-neutral-400'
                               } ${isBangla ? 'font-bangla' : ''}`}
                             >
@@ -624,7 +632,7 @@ export default function RemindersPage() {
                             <div className="flex shrink-0 gap-1 no-print">
                               <Link
                                 to={`/tracker?member=${encodeURIComponent(reminder.profileId)}&vaccine=${encodeURIComponent(reminder.vaccineId)}&dose=${reminder.doseNumber ?? ''}&action=record`}
-                                className="btn-ghost btn-sm"
+                                className="btn-secondary btn-sm whitespace-nowrap shrink-0"
                               >
                                 {t('reminders.item.record')}
                               </Link>

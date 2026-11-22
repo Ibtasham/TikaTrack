@@ -45,19 +45,13 @@ type SortKey = 'name' | 'category' | 'introduced';
 
 const SORT_KEYS: SortKey[] = ['name', 'category', 'introduced'];
 
-/** Readable colour classes for a vaccine's declared colour name. */
-function colourClasses(colour: string): { bg: string; text: string } {
+function accentBg(colour: string): string {
   const found = vaccineColors[colour] ?? vaccineColors.emerald;
-  return { bg: found.bg, text: found.text };
+  return found.bg;
 }
 
 /**
  * `/vaccines` — the catalogue.
- *
- * Search is debounced and every filter is combined with AND, which is the bug
- * the original single-file app had: its search box ignored the district and
- * type selections, so "Dhaka" plus a query silently widened back to the whole
- * country.
  */
 export default function VaccinesPage() {
   const { t, language } = useI18n();
@@ -131,10 +125,10 @@ export default function VaccinesPage() {
 
   return (
     <div className="page-shell">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Syringe className="h-4 w-4" aria-hidden="true" />
-          {t('nav.vaccines')}
+      <header className="border-b border-neutral-200/80 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <Syringe className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{t('nav.vaccines')}</span>
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
           {t('vaccines.title')}
@@ -145,9 +139,39 @@ export default function VaccinesPage() {
       </header>
 
       {/* --- Controls ------------------------------------------------------ */}
-      <div className="card-padded mt-8 no-print">
+      <div className="card-padded mt-6 space-y-4 no-print">
+        {/* Segmented programme group tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs font-semibold text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+            {t('vaccines.filter.programme')}:
+          </span>
+          <div className="segmented-group" role="group" aria-label={t('vaccines.filter.programme')}>
+            <button
+              type="button"
+              aria-pressed={programmeGroup === 'all'}
+              onClick={() => setProgrammeGroup('all')}
+              className={`segmented-tab ${programmeGroup === 'all' ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300' : ''}`}
+            >
+              {t('common.label.all')}
+            </button>
+            {PROGRAMME_GROUPS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={programmeGroup === value}
+                onClick={() => setProgrammeGroup(value)}
+                className={`segmented-tab ${
+                  programmeGroup === value ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300' : ''
+                } ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {t(`vaccines.programmeGroup.${value}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
-          <div className="relative md:col-span-2 lg:col-span-1">
+          <div className="relative md:col-span-2 lg:col-span-1 lg:self-end">
             <label className="sr-only" htmlFor="vaccine-search">
               {t('vaccines.search')}
             </label>
@@ -241,8 +265,8 @@ export default function VaccinesPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <span className="font-medium text-neutral-600 dark:text-neutral-300">
+        <div className="flex flex-wrap items-center gap-3 border-t border-neutral-100 pt-3 text-sm dark:border-neutral-800">
+          <span className="font-medium text-neutral-600 tabular-nums dark:text-neutral-300">
             {t('vaccines.count', results.length)}
           </span>
           {activeFilters > 0 && (
@@ -251,7 +275,7 @@ export default function VaccinesPage() {
               {t('vaccines.clearFilters')}
             </button>
           )}
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-neutral-500 tabular-nums dark:text-neutral-400">
             <Filter className="h-3.5 w-3.5" aria-hidden="true" />
             {t('centres.filters.active', activeFilters)}
           </span>
@@ -270,104 +294,93 @@ export default function VaccinesPage() {
         </div>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map((vaccine, index) => {
-            const { bg, text } = colourClasses(vaccine.color);
+          {results.map((vaccine) => {
+            const stripe = accentBg(vaccine.color);
             const evidence = evidenceForLegacy(vaccine.id);
             const isResearch = evidence ? !evidence.publishable : false;
+            const clinical = getVaccineClinicalProfile(vaccine);
             return (
-              <li
-                key={vaccine.id}
-                className={`card-hover animate-slide-up flex flex-col stagger-${Math.min(index, 6) + 1}`}
-              >
-                <div
-                  className={`flex items-center gap-3 rounded-t-[var(--radius-card)] px-5 py-4 ${bg}`}
-                >
-                  <span className="text-2xl" aria-hidden="true">
-                    {vaccine.icon}
-                  </span>
-                  <div className="min-w-0">
-                    <h2 className={`truncate font-bold ${text} ${isBangla ? 'font-bangla' : ''}`}>
-                      {vaccine.name[language]}
-                    </h2>
-                    <p
-                      className={`truncate text-xs ${text} opacity-90 ${isBangla ? 'font-bangla' : ''}`}
-                    >
-                      {vaccine.fullName[language]}
-                    </p>
-                  </div>
-                </div>
+              <li key={vaccine.id} className="card-hover flex flex-col overflow-hidden">
+                {/* 3px subtle clinical colour hairline rule instead of a saturated banner */}
+                <div className={`h-1 w-full ${stripe}`} aria-hidden="true" />
 
                 <div className="flex flex-1 flex-col gap-3 p-5">
-                  <div className="space-y-1">
-                    {evidence && (
-                      <p
-                        className={`text-xs font-semibold ${
-                          evidence.programme === 'bd-nip-routine'
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : isResearch
-                              ? 'text-red-700 dark:text-red-400'
-                              : 'text-sky-700 dark:text-sky-400'
-                        } ${isBangla ? 'font-bangla' : ''}`}
-                      >
-                        {t(`vaccines.programme.${evidence.programme}`)}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {evidence && (
+                        <p
+                          className={`text-[11px] font-semibold tracking-wide uppercase ${
+                            evidence.programme === 'bd-nip-routine'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : isResearch
+                                ? 'text-red-700 dark:text-red-400'
+                                : 'text-sky-700 dark:text-sky-400'
+                          } ${isBangla ? 'font-bangla' : ''}`}
+                        >
+                          {t(`vaccines.programme.${evidence.programme}`)}
+                        </p>
+                      )}
+                      <h2 className={`mt-1 truncate text-lg font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+                        {vaccine.name[language]}
+                      </h2>
+                      <p className={`truncate text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                        {vaccine.fullName[language]}
                       </p>
-                    )}
-                    <p
-                      className={`text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                    </div>
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200/80 bg-neutral-50 text-base dark:border-neutral-800 dark:bg-neutral-800/60"
+                      aria-hidden="true"
                     >
-                      {t(`vaccines.category.${vaccine.category}`)}
-                      <span aria-hidden="true"> · </span>
-                      {isResearch
-                        ? t('vaccines.researchOnlyDoses')
-                        : t('vaccines.doses', vaccine.doses)}
-                      {vaccine.efficacy ? (
-                        <>
-                          <span aria-hidden="true"> · </span>
-                          {t('vaccines.efficacy')}: {vaccine.efficacy}
-                        </>
-                      ) : null}
-                    </p>
+                      {vaccine.icon}
+                    </span>
                   </div>
 
-                  <p
-                    className={`line-clamp-2 text-sm font-medium text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}
-                  >
+                  <p className={`line-clamp-2 text-sm font-medium text-neutral-800 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                     {vaccine.disease[language]}
                   </p>
 
-                  {(() => {
-                    const clinical = getVaccineClinicalProfile(vaccine);
-                    return (
-                      <dl className="space-y-1.5 border-t border-neutral-100 pt-2.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-300">
-                        <div>
-                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
-                            {t('vaccines.detail.schedule')}:{' '}
-                          </dt>
-                          <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
-                            {vaccine.schedule[language]}
-                          </dd>
-                        </div>
-                        <div className="line-clamp-1">
-                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
-                            {t('vaccines.detail.platform')}:{' '}
-                          </dt>
-                          <dd className={`inline ${isBangla ? 'font-bangla' : ''}`}>
-                            {clinical.platform[language]}
-                          </dd>
-                        </div>
-                        <div className="line-clamp-1">
-                          <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
-                            {t('vaccines.detail.route')}:{' '}
-                          </dt>
-                          <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
-                            {clinical.route[language]}
-                          </dd>
-                        </div>
-                      </dl>
-                    );
-                  })()}
+                  <p className={`text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}>
+                    {t(`vaccines.category.${vaccine.category}`)}
+                    <span aria-hidden="true"> · </span>
+                    {isResearch
+                      ? t('vaccines.researchOnlyDoses')
+                      : t('vaccines.doses', vaccine.doses)}
+                    {vaccine.efficacy ? (
+                      <>
+                        <span aria-hidden="true"> · </span>
+                        {t('vaccines.efficacy')}: {vaccine.efficacy}
+                      </>
+                    ) : null}
+                  </p>
 
-                  <div className="mt-auto flex gap-2 pt-2">
+                  <dl className="space-y-1.5 border-t border-neutral-100 pt-2.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-300">
+                    <div>
+                      <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                        {t('vaccines.detail.schedule')}:{' '}
+                      </dt>
+                      <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                        {vaccine.schedule[language]}
+                      </dd>
+                    </div>
+                    <div className="line-clamp-1">
+                      <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                        {t('vaccines.detail.platform')}:{' '}
+                      </dt>
+                      <dd className={`inline ${isBangla ? 'font-bangla' : ''}`}>
+                        {clinical.platform[language]}
+                      </dd>
+                    </div>
+                    <div className="line-clamp-1">
+                      <dt className="inline font-semibold text-neutral-500 dark:text-neutral-400">
+                        {t('vaccines.detail.route')}:{' '}
+                      </dt>
+                      <dd className={`inline tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                        {clinical.route[language]}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-auto flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
                     <Link
                       to={`/vaccines/${vaccine.id}`}
                       className="btn-secondary btn-sm flex-1 whitespace-nowrap shrink-0"

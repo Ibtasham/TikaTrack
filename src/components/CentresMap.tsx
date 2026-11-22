@@ -787,29 +787,27 @@ function InnerCentresMap({
                 {t('centres.map.routeError')}
               </span>
             ) : routeSummary ? (
-              <span className="badge-done tabular-nums">
+              <span className="status-inline text-emerald-700 tabular-nums dark:text-emerald-300">
                 {routeSummary.durationText} · {routeSummary.distanceText}
               </span>
             ) : null}
 
-            <div className="ml-auto flex flex-wrap items-center gap-1">
-              {TRAVEL_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onTravelModeChange(mode)}
-                  className={`chip ${
-                    travelMode === mode
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-white text-neutral-700 hover:bg-neutral-100 dark:bg-neutral-800 dark:text-neutral-200'
-                  }`}
-                >
-                  {t(`centres.map.mode.${mode}`)}
-                </button>
-              ))}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="segmented-group">
+                {TRAVEL_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onTravelModeChange(mode)}
+                    className={`segmented-tab ${travelMode === mode ? 'segmented-tab-active' : ''}`}
+                  >
+                    {t(`centres.map.mode.${mode}`)}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
-                className="btn-ghost btn-sm ml-1"
+                className="btn-ghost btn-sm"
                 onClick={onClearRoute}
                 aria-label={t('centres.map.clearRoute')}
               >

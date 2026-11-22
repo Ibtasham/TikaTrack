@@ -243,22 +243,19 @@ export default function AuthPage() {
     return (
       <div className="page-shell max-w-md">
         <div className="card-padded">
-          <div className="mb-5 flex items-center gap-2 text-sm font-semibold text-neutral-500 dark:text-neutral-400">
+          <p className="eyebrow mb-3">
             {cloudEnabled ? (
               <>
-                <Cloud className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden="true" />
+                <Cloud className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" aria-hidden="true" />
                 {t('auth.cloudMode', backend === 'firebase' ? 'Firebase + Cloud SQL' : 'Supabase')}
               </>
             ) : (
               <>
-                <HardDrive
-                  className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
-                  aria-hidden="true"
-                />
+                <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
                 {t('auth.localMode')}
               </>
             )}
-          </div>
+          </p>
 
           <h1 className={`section-title ${isBangla ? 'font-bangla' : ''}`}>{heading}</h1>
           <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>{subheading}</p>
@@ -472,8 +469,12 @@ export default function AuthPage() {
 
   return (
     <div className="page-shell max-w-3xl">
-      <header>
-        <h1 className={`section-title ${isBangla ? 'font-bangla' : ''}`}>
+      <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+          {t('nav.account')}
+        </p>
+        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
           {t('auth.login.title')}
         </h1>
         <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
@@ -662,7 +663,7 @@ export default function AuthPage() {
               {family.name}
             </p>
 
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-700 dark:bg-neutral-900">
               {familyMembers.map((member) => {
                 const name =
                   member.user_profile?.full_name || member.user_profile?.email || member.user_id;
@@ -670,7 +671,7 @@ export default function AuthPage() {
                 return (
                   <li
                     key={member.id}
-                    className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 p-3 dark:border-neutral-700"
+                    className="flex flex-wrap items-center gap-3 px-4 py-3"
                   >
                     {member.role === 'owner' && (
                       <Crown

@@ -2,43 +2,33 @@ import { useCallback, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarPlus,
-  Database,
   Download,
   Printer,
   Stethoscope,
-  TriangleAlert,
   Trash2,
+  TriangleAlert,
   Upload,
   Users,
 } from 'lucide-react';
 
 import SmartTracker from '../components/SmartTracker';
-import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PageSkeleton } from '../components/Skeleton';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
-import { downloadCSV, downloadJSON, printElement } from '../lib/exporters';
-import { buildExport } from '../lib/profileStore';
 import { doseCsvCount, doseCsvRows } from '../lib/doseExport';
+import { downloadCSV, downloadJSON, printElement } from '../lib/exporters';
 import { formatDate, todayISO } from '../lib/format';
 import { downloadICS, eventUid, type CalendarEvent } from '../lib/ics';
 import { reminderAlarmOffsets } from '../lib/intelligentReminders';
+import { buildExport } from '../lib/profileStore';
 import { appUrl } from '../lib/share';
 import { generatePersonalizedSchedule, milestoneDoseName } from '../lib/smartScheduler';
 import type { Profile } from '../types';
 
 /**
  * `/tracker` — family member management and dose recording.
- *
- * The interactive part (add member, record dose, catch-up plan, timeline) lives
- * in `SmartTracker`; this page owns everything around it: persistence status,
- * backup/restore, printing and the destructive "erase everything" action.
- *
- * Profiles are read from and written through `ProfilesContext`, which persists
- * on every change. The original app loaded profiles once and never wrote them
- * back, so every dose recorded was lost on reload — the single worst bug in the
- * codebase.
  */
 export default function TrackerPage() {
   const { t, language } = useI18n();
@@ -63,22 +53,12 @@ export default function TrackerPage() {
     toast.success(t('common.actions.download'), t('tracker.export.json'));
   };
 
-  /**
-   * One row per **administered dose**, straight from the ledger.
-   *
-   * The rows are built in `lib/doseExport` so the CSV, the tests and any future
-   * reader agree on one column order.
-   */
   const handleExportCSV = () => {
     const rows = doseCsvRows(profiles, language);
     downloadCSV(`tikatrack-doses-${doseCsvCount(profiles)}.csv`, rows);
     toast.success(t('common.actions.download'), t('tracker.export.csv'));
   };
 
-  /**
-   * Every outstanding dose for every member, as one calendar file. Alarms come
-   * from the reminder settings, so the phone and the calendar agree.
-   */
   const handleFamilyCalendar = () => {
     const alarms = reminderAlarmOffsets();
     const events: CalendarEvent[] = [];
@@ -145,20 +125,91 @@ export default function TrackerPage() {
 
   return (
     <div className="page-shell">
-      <header className="no-print">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Users className="h-4 w-4" aria-hidden="true" />
-          {t('nav.tracker')}
-        </p>
-        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
-          {t('tracker.title')}
-        </h1>
-        <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
-          {t('tracker.subtitle')}
-        </p>
+      <header className="no-print border-b border-neutral-200/80 pb-6 dark:border-neutral-800">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="eyebrow">
+              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t('nav.tracker')}</span>
+            </p>
+            <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
+              {t('tracker.title')}
+            </h1>
+            <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
+              {t('tracker.subtitle')}
+            </p>
+          </div>
+
+          {/* Compact clinical ledger utility strip */}
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="region"
+            aria-label={t('tracker.export.title')}
+          >
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={handleExportJSON}
+              disabled={profiles.length === 0}
+              title={t('tracker.export.body')}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('tracker.export.json')}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={handleExportCSV}
+              disabled={profiles.length === 0}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('tracker.export.csv')}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('common.actions.import')}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={handleFamilyCalendar}
+              disabled={profiles.length === 0}
+              title={t('tracker.calendar.title')}
+            >
+              <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className={isBangla ? 'font-bangla' : undefined}>
+                {t('tracker.calendar.family')}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={handlePrint}
+              disabled={profiles.length === 0}
+            >
+              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('common.actions.print')}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void handleImportFile(file);
+                event.target.value = '';
+              }}
+            />
+          </div>
+        </div>
 
         {needsReview.length > 0 && (
-          <p className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span className={isBangla ? 'font-bangla' : undefined}>
               {t(
@@ -171,7 +222,7 @@ export default function TrackerPage() {
         )}
 
         {!persistent && (
-          <p className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span className={isBangla ? 'font-bangla' : undefined}>
               {t('home.banner.notPersistent')}
@@ -180,84 +231,7 @@ export default function TrackerPage() {
         )}
       </header>
 
-      {/* --- Tools --------------------------------------------------------- */}
-      <div className="card-padded mt-6 no-print">
-        <h2
-          className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
-        >
-          <Database className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          {t('tracker.export.title')}
-        </h2>
-        <p
-          className={`mt-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
-        >
-          {t('tracker.export.body')}
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleExportJSON}
-            disabled={profiles.length === 0}
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            {t('tracker.export.json')}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleExportCSV}
-            disabled={profiles.length === 0}
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            {t('tracker.export.csv')}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            {t('common.actions.import')}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleFamilyCalendar}
-            disabled={profiles.length === 0}
-            title={t('tracker.calendar.title')}
-          >
-            <CalendarPlus className="h-4 w-4" aria-hidden="true" />
-            <span className={isBangla ? 'font-bangla' : undefined}>
-              {t('tracker.calendar.family')}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={handlePrint}
-            disabled={profiles.length === 0}
-          >
-            <Printer className="h-4 w-4" aria-hidden="true" />
-            {t('common.actions.print')}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void handleImportFile(file);
-              // Reset so picking the same file twice still fires onChange.
-              event.target.value = '';
-            }}
-          />
-        </div>
-      </div>
-
-      {/* --- The tracker itself -------------------------------------------- */}
+      {/* --- Family Tracker Workspace --------------------------------------- */}
       <div ref={printableRef} className="print-area mt-6">
         <SmartTracker profiles={profiles} setProfiles={handleProfilesChange} />
       </div>
@@ -270,7 +244,7 @@ export default function TrackerPage() {
             {t('tracker.empty.title')}
           </p>
           <p
-            className={`mx-auto mt-2 max-w-lg text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+            className={`mx-auto mt-2 max-w-lg text-sm text-neutral-600 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
           >
             {t('tracker.empty.body')}
           </p>
@@ -285,27 +259,33 @@ export default function TrackerPage() {
         </div>
       )}
 
-      {/* --- Disclaimer ---------------------------------------------------- */}
-      <p className="mt-6 flex items-start gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 no-print dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-        <Stethoscope className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      {/* --- Clinical Disclaimer -------------------------------------------- */}
+      <p className="mt-6 flex items-start gap-2 rounded-lg border border-neutral-200/80 bg-neutral-50/80 p-3.5 text-xs leading-relaxed text-neutral-600 no-print dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
+        <Stethoscope className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
         <span className={isBangla ? 'font-bangla' : undefined}>{t('tracker.medicalAdvice')}</span>
       </p>
 
-      {/* --- Danger zone --------------------------------------------------- */}
+      {/* --- Danger zone ---------------------------------------------------- */}
       {profiles.length > 0 && (
-        <div className="card-padded mt-6 border-red-200 no-print dark:border-red-900">
-          <h2
-            className={`flex items-center gap-2 font-bold text-red-700 dark:text-red-400 ${isBangla ? 'font-bangla' : ''}`}
+        <div className="mt-6 flex flex-col gap-3 rounded-xl border border-red-200/90 bg-red-50/40 p-5 sm:flex-row sm:items-center sm:justify-between no-print dark:border-red-900/60 dark:bg-red-950/20">
+          <div>
+            <h2
+              className={`flex items-center gap-2 text-sm font-bold text-red-800 dark:text-red-300 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {t('tracker.danger.title')}
+            </h2>
+            <p
+              className={`mt-1 text-xs text-neutral-600 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+            >
+              {t('tracker.danger.body')}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-danger btn-sm shrink-0"
+            onClick={() => setConfirmErase(true)}
           >
-            <Trash2 className="h-5 w-5" aria-hidden="true" />
-            {t('tracker.danger.title')}
-          </h2>
-          <p
-            className={`mt-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
-          >
-            {t('tracker.danger.body')}
-          </p>
-          <button type="button" className="btn-danger mt-4" onClick={() => setConfirmErase(true)}>
             {t('tracker.danger.button')}
           </button>
         </div>

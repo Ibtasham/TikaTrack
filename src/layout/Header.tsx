@@ -24,13 +24,13 @@ import {
 } from 'lucide-react';
 
 import { InstallButton } from '../components/InstallButton';
-import { openCommandPalette } from '../lib/commandPalette';
 import Logo from '../components/Logo';
 import { TextSizeButton } from '../components/TextSizeButton';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme, type ThemePreference } from '../contexts/ThemeContext';
 import { useFocusTrap } from '../hooks';
 import { useI18n } from '../i18n';
+import { openCommandPalette } from '../lib/commandPalette';
 
 interface NavItem {
   to: string;
@@ -66,8 +66,8 @@ function navClass({ isActive }: { isActive: boolean }): string {
   return [
     'flex items-center gap-2 whitespace-nowrap shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
     isActive
-      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-      : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white',
+      ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+      : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800/80 dark:hover:text-white',
   ].join(' ');
 }
 
@@ -79,8 +79,7 @@ export function Header() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  // One mechanism for both popovers: Escape, outside pointer-down and Tab
-  // cycling all come from `useFocusTrap`.
+
   const moreRef = useFocusTrap<HTMLLIElement>(moreOpen, {
     onEscape: () => setMoreOpen(false),
     onOutsideClick: () => setMoreOpen(false),
@@ -92,7 +91,6 @@ export function Header() {
     autoFocus: false,
   });
 
-  // Navigating (including via the mobile menu) must close the drawers.
   useEffect(() => {
     setMobileOpen(false);
     setMoreOpen(false);
@@ -102,27 +100,27 @@ export function Header() {
   const moreActive = SECONDARY_NAV.some((item) => pathname.startsWith(item.to));
 
   return (
-    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/85 backdrop-blur-lg dark:border-neutral-800 dark:bg-neutral-900/85">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/90 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-950/90">
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-16 lg:px-8">
         <NavLink
           to="/"
-          className="flex shrink-0 items-center gap-2"
+          className="flex shrink-0 items-center gap-2.5"
           aria-label={t('app.title')}
           title={t('app.tagline')}
         >
           <Logo size="sm" showText={false} />
-          <span className="hidden text-lg font-bold tracking-tight text-neutral-900 sm:inline dark:text-white">
+          <span className="hidden text-base font-bold tracking-tight text-neutral-900 sm:inline dark:text-white">
             TikaTrack
           </span>
         </NavLink>
 
         {/* Desktop navigation */}
-        <nav aria-label={t('common.a11y.mainNavigation')} className="ml-2 hidden flex-1 lg:block">
-          <ul className="flex items-center gap-1">
+        <nav aria-label={t('common.a11y.mainNavigation')} className="ml-3 hidden flex-1 lg:block">
+          <ul className="flex items-center gap-0.5">
             {PRIMARY_NAV.slice(1).map(({ to, labelKey, icon: Icon }) => (
               <li key={to}>
                 <NavLink to={to} className={navClass} end={to === '/'}>
-                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <Icon className="h-4 w-4 opacity-80" aria-hidden="true" />
                   <span className={isBangla ? 'font-bangla' : undefined}>{t(labelKey)}</span>
                 </NavLink>
               </li>
@@ -142,10 +140,10 @@ export function Header() {
                 />
               </button>
               {moreOpen && (
-                <div className="animate-scale-in absolute right-0 mt-2 w-56 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+                <div className="animate-scale-in absolute right-0 mt-2 w-56 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
                   {SECONDARY_NAV.map(({ to, labelKey, icon: Icon }) => (
                     <NavLink key={to} to={to} className={navClass}>
-                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <Icon className="h-4 w-4 opacity-80" aria-hidden="true" />
                       <span className={isBangla ? 'font-bangla' : undefined}>{t(labelKey)}</span>
                     </NavLink>
                   ))}
@@ -159,13 +157,13 @@ export function Header() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+            className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-white"
             aria-label={t('nav.quickSearch')}
             title={`${t('nav.quickSearch')} (${t('cmd.shortcutHint')})`}
           >
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="hidden xl:inline">{t('cmd.triggerLabel')}</span>
-            <kbd className="hidden rounded border border-neutral-300 bg-white px-1 py-0.5 font-mono text-[10px] text-neutral-500 xl:inline dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+            <kbd className="hidden rounded border border-neutral-300 bg-white px-1 py-0.5 font-mono text-[10px] text-neutral-500 xl:inline dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400">
               ⌘K
             </kbd>
           </button>
@@ -174,21 +172,21 @@ export function Header() {
 
           <TextSizeButton />
 
-          {/* Language */}
+          {/* Language toggle */}
           <button
             type="button"
             onClick={toggleLanguage}
-            className="btn-ghost btn-sm whitespace-nowrap"
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
             aria-label={t('common.label.language')}
             title={`${t('common.label.language')}: ${language === 'en' ? 'English' : 'বাংলা'}`}
           >
-            <Globe className="h-4 w-4" aria-hidden="true" />
+            <Globe className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="font-bangla">{isBangla ? 'EN' : 'বাং'}</span>
           </button>
 
           {/* Theme */}
           <div
-            className="hidden items-center rounded-lg border border-neutral-200 p-0.5 sm:flex dark:border-neutral-700"
+            className="hidden items-center rounded-lg border border-neutral-200 bg-neutral-50 p-0.5 sm:flex dark:border-neutral-800 dark:bg-neutral-900"
             role="group"
             aria-label={t('common.label.theme')}
           >
@@ -202,18 +200,18 @@ export function Header() {
                 aria-label={t(labelKey)}
                 className={`rounded-md p-1.5 transition-colors ${
                   preference === value
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                    ? 'bg-white text-emerald-700 shadow-xs dark:bg-neutral-800 dark:text-emerald-300'
                     : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white'
                 }`}
               >
-                <Icon className="h-4 w-4" aria-hidden="true" />
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             ))}
           </div>
           <button
             type="button"
             onClick={() => setTheme(preference === 'dark' ? 'light' : 'dark')}
-            className="btn-ghost btn-sm sm:hidden"
+            className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100 sm:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
             aria-label={t('common.theme.toggle')}
           >
             {preference === 'dark' ? (
@@ -224,9 +222,14 @@ export function Header() {
           </button>
 
           {/* Account */}
-          <NavLink to="/auth" className={navClass} title={t('nav.auth')}>
+          <NavLink
+            to="/auth"
+            className={navClass}
+            title={t('nav.auth')}
+            aria-label={user ? user.full_name || user.email : t('nav.auth')}
+          >
             <User className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden xl:inline">
+            <span className="hidden max-w-[8rem] truncate xl:inline">
               {user ? user.full_name || user.email : t('nav.auth')}
             </span>
           </NavLink>
@@ -235,7 +238,7 @@ export function Header() {
           <button
             type="button"
             onClick={() => setMobileOpen((open) => !open)}
-            className="btn-ghost btn-sm lg:hidden"
+            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100 lg:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
             aria-label={mobileOpen ? t('common.a11y.closeMenu') : t('common.a11y.openMenu')}
@@ -254,13 +257,13 @@ export function Header() {
           id="mobile-navigation"
           ref={mobileRef}
           aria-label={t('common.a11y.mainNavigation')}
-          className="animate-slide-up border-t border-neutral-200 bg-white px-4 py-3 lg:hidden dark:border-neutral-800 dark:bg-neutral-900"
+          className="animate-slide-up border-t border-neutral-200 bg-white px-4 py-3 lg:hidden dark:border-neutral-800 dark:bg-neutral-950"
         >
-          <ul className="grid gap-1">
+          <ul className="grid gap-1 sm:grid-cols-2">
             {[...PRIMARY_NAV, ...SECONDARY_NAV].map(({ to, labelKey, icon: Icon }) => (
               <li key={to}>
                 <NavLink to={to} className={navClass} end={to === '/'}>
-                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <Icon className="h-4 w-4 opacity-80" aria-hidden="true" />
                   <span className={isBangla ? 'font-bangla' : undefined}>{t(labelKey)}</span>
                 </NavLink>
               </li>

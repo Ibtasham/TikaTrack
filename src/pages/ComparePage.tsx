@@ -95,10 +95,10 @@ export default function ComparePage() {
 
   return (
     <div className="page-shell">
-      <header className="no-print">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Scale className="h-4 w-4" aria-hidden="true" />
-          {t('nav.compare')}
+      <header className="no-print border-b border-neutral-200/80 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <Scale className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{t('nav.compare')}</span>
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
           {t('compare.title')}
@@ -160,8 +160,9 @@ export default function ComparePage() {
               return (
                 <li key={vaccine.id}>
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${colour.bg} ${colour.text}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                   >
+                    <span className={`h-2 w-2 rounded-full ${colour.bg}`} aria-hidden="true" />
                     <span className={isBangla ? 'font-bangla' : undefined}>
                       {vaccine.name[language]}
                     </span>
@@ -169,7 +170,7 @@ export default function ComparePage() {
                       type="button"
                       onClick={() => remove(vaccine.id)}
                       aria-label={`${t('compare.remove')}: ${vaccine.name.en}`}
-                      className="opacity-80 transition-opacity hover:opacity-100"
+                      className="rounded p-0.5 text-neutral-400 transition-colors hover:bg-neutral-200/70 hover:text-neutral-800 dark:hover:bg-neutral-700 dark:hover:text-white"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
@@ -205,10 +206,10 @@ export default function ComparePage() {
               <table className="w-full min-w-[40rem] border-collapse text-sm">
                 <caption className="sr-only">{t('compare.title')}</caption>
                 <thead>
-                  <tr className="bg-neutral-50 dark:bg-neutral-800">
+                  <tr className="border-b border-neutral-200 bg-neutral-50/90 dark:border-neutral-800 dark:bg-neutral-800/80">
                     <th
                       scope="col"
-                      className={`px-4 py-3 text-left font-semibold text-neutral-700 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}
+                      className={`px-4 py-3 text-left text-xs font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                     >
                       {t('compare.attribute')}
                     </th>
@@ -216,7 +217,7 @@ export default function ComparePage() {
                       <th
                         key={vaccine.id}
                         scope="col"
-                        className={`px-4 py-3 text-left font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                        className={`px-4 py-3 text-left font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                       >
                         <Link to={`/vaccines/${vaccine.id}`} className="link">
                           {vaccine.name[language]}
@@ -225,22 +226,22 @@ export default function ComparePage() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                   {ATTRIBUTES.map(({ key, read }) => (
                     <tr
                       key={key}
-                      className="border-t border-neutral-100 align-top dark:border-neutral-800"
+                      className="align-top transition-colors odd:bg-white even:bg-neutral-50/40 dark:odd:bg-neutral-900 dark:even:bg-neutral-900/60"
                     >
                       <th
                         scope="row"
-                        className={`px-4 py-3 text-left font-medium whitespace-nowrap text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                        className={`px-4 py-3 text-left text-xs font-semibold whitespace-nowrap text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                       >
                         {t(`compare.attribute.${key}`)}
                       </th>
                       {selected.map((vaccine) => (
                         <td
                           key={vaccine.id}
-                          className={`px-4 py-3 text-neutral-800 dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}
+                          className={`px-4 py-3 text-neutral-800 tabular-nums dark:text-neutral-100 ${isBangla ? 'font-bangla' : ''}`}
                         >
                           {key === 'category'
                             ? t(`vaccines.category.${vaccine.category}`)

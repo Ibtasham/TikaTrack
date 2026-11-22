@@ -84,9 +84,9 @@ export default function AboutPage() {
 
   return (
     <div className="page-shell max-w-4xl">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Info className="h-4 w-4" aria-hidden="true" />
+      <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
           {t('nav.about')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -95,20 +95,22 @@ export default function AboutPage() {
         <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>{t('about.subtitle')}</p>
       </header>
 
-      <dl className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-800">
         {[
           { value: allVaccines.length, label: t('home.stats.vaccines') },
           { value: allVaccinationCentres.length, label: t('home.stats.centres') },
           { value: 2, label: t('home.stats.languages') },
           { value: `v${APP_VERSION}`, label: t('about.version') },
         ].map(({ value, label }) => (
-          <div key={label} className="card-padded text-center">
+          <div key={label} className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
             <dt
-              className={`order-last mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+              className={`order-last mt-1 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
             >
               {label}
             </dt>
-            <dd className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{value}</dd>
+            <dd className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -146,14 +148,14 @@ export default function AboutPage() {
           {t('about.tech.body')}
         </p>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-          <li className="flex items-start gap-3 rounded-xl bg-neutral-50 p-3 text-sm dark:bg-neutral-800">
+          <li className="surface-subtle flex items-start gap-3 p-3.5 text-sm">
             <CloudOff
               className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
               aria-hidden="true"
             />
             <span className={isBangla ? 'font-bangla' : undefined}>{t('home.offline.title')}</span>
           </li>
-          <li className="flex items-start gap-3 rounded-xl bg-neutral-50 p-3 text-sm dark:bg-neutral-800">
+          <li className="surface-subtle flex items-start gap-3 p-3.5 text-sm">
             <HardDrive
               className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
               aria-hidden="true"
@@ -163,7 +165,7 @@ export default function AboutPage() {
         </ul>
       </section>
 
-      <section className="card-padded mt-5 border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
+      <section className="card-padded mt-5 border-amber-200/80 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20">
         <h2
           className={`flex items-center gap-2 text-lg font-bold text-amber-900 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
         >
@@ -177,9 +179,9 @@ export default function AboutPage() {
         </p>
         <a
           href="tel:16263"
-          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+          className="btn-secondary btn-sm mt-4 border-amber-300 text-amber-900 hover:bg-amber-100/70 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/60"
         >
-          <Phone className="h-4 w-4" aria-hidden="true" />
+          <Phone className="h-3.5 w-3.5" aria-hidden="true" />
           {t('about.hotline')}: 16263
         </a>
       </section>

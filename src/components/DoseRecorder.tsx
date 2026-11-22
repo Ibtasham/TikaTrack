@@ -228,12 +228,12 @@ export function DoseRecorder({
   return (
     <form
       id="dose-recorder-form"
-      className={`card-padded space-y-4 ${className}`}
+      className={`surface-subtle space-y-4 p-4 sm:p-5 ${className}`}
       onSubmit={handleSubmit}
       aria-label={t('tracker.dose.title', profile.name)}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className={`section-title ${isBangla ? 'font-bangla' : ''}`}>
+        <h3 className={`text-base font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
           {t('tracker.dose.title', profile.name)}
         </h3>
         <button

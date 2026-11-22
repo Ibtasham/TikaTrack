@@ -754,9 +754,9 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
       )}
 
       {/* Chart Controls Toolbar */}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4 dark:border-neutral-800 no-print">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200/80 pt-4 dark:border-neutral-800 no-print">
         <div
-          className="inline-flex flex-wrap rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800"
+          className="segmented-group"
           role="group"
           aria-label={t('growth.title')}
         >
@@ -766,10 +766,8 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
               type="button"
               onClick={() => setMetric(key)}
               aria-pressed={metric === key}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                metric === key
-                  ? 'bg-white text-emerald-700 shadow-sm dark:bg-neutral-900 dark:text-emerald-300'
-                  : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white'
+              className={`segmented-tab ${
+                metric === key ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300' : ''
               }`}
             >
               {key === 'weight' ? (
@@ -785,7 +783,7 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
+          <div className="segmented-group">
             {(['auto', 12, 24, 36, 60] as const).map((win) => {
               const labelKey =
                 win === 'auto' ? 'growth.window.auto' : `growth.window.${win}m`;
@@ -795,10 +793,8 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
                   type="button"
                   onClick={() => setAgeWindow(win)}
                   aria-pressed={ageWindow === win}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                    ageWindow === win
-                      ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-white'
-                      : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white'
+                  className={`segmented-tab ${
+                    ageWindow === win ? 'segmented-tab-active' : ''
                   }`}
                 >
                   {t(labelKey)}
@@ -811,7 +807,7 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
             type="button"
             onClick={() => setShowVaccines((v) => !v)}
             aria-pressed={showVaccines}
-            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
               showVaccines
                 ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                 : 'border-neutral-200 bg-white text-neutral-600 hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'

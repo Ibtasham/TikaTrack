@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Heart, Phone, ShieldCheck } from 'lucide-react';
+import { Phone, ShieldCheck } from 'lucide-react';
 
 import Logo from '../components/Logo';
 import { useI18n } from '../i18n';
@@ -15,22 +15,18 @@ const PRODUCT_LINKS = [
 
 const RESOURCE_LINKS = [
   { to: '/readiness', labelKey: 'nav.readiness' },
+  { to: '/cold-chain', labelKey: 'nav.coldChain' },
   { to: '/tikabot', labelKey: 'nav.tikabot' },
   { to: '/reminders', labelKey: 'nav.reminders' },
   { to: '/compare', labelKey: 'nav.compare' },
   { to: '/passport', labelKey: 'nav.passport' },
-  { to: '/about', labelKey: 'nav.about' },
 ] as const;
 
-const LEGAL_LINKS = [{ to: '/privacy', labelKey: 'nav.privacy' }] as const;
+const LEGAL_LINKS = [
+  { to: '/about', labelKey: 'nav.about' },
+  { to: '/privacy', labelKey: 'nav.privacy' },
+] as const;
 
-/**
- * Site footer.
- *
- * The health hotline is deliberately the most prominent link in the footer: if
- * someone is reading TikaTrack during a medical worry, the fastest safe route is
- * a phone call, not another page of this app.
- */
 export function Footer() {
   const { t, language } = useI18n();
   const isBangla = language === 'bn';
@@ -38,8 +34,10 @@ export function Footer() {
 
   const column = (title: string, links: ReadonlyArray<{ to: string; labelKey: string }>) => (
     <div>
-      <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">{title}</h3>
-      <ul className="mt-3 space-y-2">
+      <h3 className="text-xs font-semibold tracking-wider text-neutral-900 uppercase dark:text-white">
+        {title}
+      </h3>
+      <ul className="mt-3 space-y-2.5">
         {links.map(({ to, labelKey }) => (
           <li key={to}>
             <Link
@@ -57,16 +55,18 @@ export function Footer() {
   );
 
   return (
-    <footer className="mt-auto border-t border-neutral-200 bg-white pb-20 lg:pb-0 dark:border-neutral-800 dark:bg-neutral-900">
+    <footer className="mt-auto border-t border-neutral-200/90 bg-white pb-18 lg:pb-0 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Logo size="sm" showText={false} />
-              <span className="text-lg font-bold text-neutral-900 dark:text-white">TikaTrack</span>
+              <span className="text-base font-bold tracking-tight text-neutral-900 dark:text-white">
+                TikaTrack
+              </span>
             </div>
             <p
-              className={`mt-3 max-w-sm text-sm text-neutral-600 dark:text-neutral-400 ${
+              className={`mt-3 max-w-sm text-sm leading-relaxed text-neutral-600 dark:text-neutral-400 ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -75,14 +75,14 @@ export function Footer() {
 
             <a
               href="tel:16263"
-              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3.5 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-950"
             >
               <Phone className="h-4 w-4" aria-hidden="true" />
-              {t('about.hotline')}: 16263
+              {t('about.hotline')}: <span className="tabular-nums">16263</span>
             </a>
 
-            <p className="mt-4 flex items-start gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
               <span className={isBangla ? 'font-bangla' : undefined}>{t('footer.disclaimer')}</span>
             </p>
           </div>
@@ -92,14 +92,11 @@ export function Footer() {
           {column(t('footer.legal'), LEGAL_LINKS)}
         </div>
 
-        <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800 dark:text-neutral-400">
-          <p>
+        <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200/80 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800 dark:text-neutral-400">
+          <p className="tabular-nums">
             © {year} TikaTrack · v{APP_VERSION} · {t('footer.rights')}
           </p>
-          <p className="flex items-center gap-1">
-            <Heart className="h-3.5 w-3.5 text-red-500" aria-hidden="true" />
-            <span className={isBangla ? 'font-bangla' : undefined}>{t('footer.text')}</span>
-          </p>
+          <p className={isBangla ? 'font-bangla' : undefined}>{t('footer.text')}</p>
         </div>
       </div>
     </footer>

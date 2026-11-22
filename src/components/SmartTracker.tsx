@@ -377,19 +377,19 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between no-print">
         <div className="flex items-center gap-2.5">
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300"
             aria-hidden="true"
           >
-            <Users className="h-5 w-5" />
+            <Users className="h-4 w-4" />
           </span>
-          <h2 className={`text-xl font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+          <h2 className={`text-lg font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
             {t('tracker.members.title')}
+            {profiles.length > 0 && (
+              <span className="ml-2 text-sm font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
+                ({localiseNumber(profiles.length, language)})
+              </span>
+            )}
           </h2>
-          {profiles.length > 0 && (
-            <span className="badge-neutral tabular-nums">
-              {localiseNumber(profiles.length, language)}
-            </span>
-          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -596,16 +596,16 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   setSelectedProfile(member.id);
                   setEditingProfileId(null);
                 }}
-                className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-colors cursor-pointer ${
                   active
-                    ? 'border-emerald-500 bg-emerald-50/70 shadow-sm ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/40'
-                    : 'border-neutral-200 bg-white hover:border-emerald-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-emerald-700'
+                    ? 'border-emerald-600 bg-emerald-50/60 dark:border-emerald-500 dark:bg-emerald-950/35'
+                    : 'border-neutral-200/90 bg-white hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700'
                 }`}
               >
                 <span
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-bold ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
                     active
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-emerald-700 text-white dark:bg-emerald-600'
                       : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
                   }`}
                   aria-hidden="true"
@@ -614,7 +614,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                 </span>
                 <span className="min-w-0 flex-1">
                   <span
-                    className={`block truncate font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                    className={`block truncate text-sm font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                   >
                     {member.name}
                   </span>
@@ -625,18 +625,22 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     )}
                   </span>
                 </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
+                <span className="flex shrink-0 flex-col items-end gap-0.5">
                   <span className="text-xs font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
                     {localiseNumber(memberStats.progressPercentage, language)}%
                   </span>
                   {attentionCount > 0 && (
-                    <span className="badge-overdue tabular-nums">
-                      {localiseNumber(attentionCount, language)}
+                    <span className="text-[11px] font-semibold tabular-nums text-red-600 dark:text-red-400">
+                      {localiseNumber(attentionCount, language)} {t('tracker.overdue').toLowerCase()}
                     </span>
                   )}
                   {memberStats.needsReview > 0 && (
-                    <span className="badge-due tabular-nums" title={t('tracker.dose.review.badge')}>
-                      !
+                    <span
+                      className="text-[11px] font-semibold tabular-nums text-amber-700 dark:text-amber-300"
+                      title={t('tracker.dose.review.badge')}
+                    >
+                      {localiseNumber(memberStats.needsReview, language)}{' '}
+                      {t('tracker.dose.review.badge').toLowerCase()}
                     </span>
                   )}
                 </span>
@@ -649,7 +653,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       {/* View Mode Selector */}
       {profiles.length > 0 && (
         <div
-          className="flex flex-wrap gap-2 no-print"
+          className="segmented-group no-print"
           role="tablist"
           aria-label={t('tracker.title')}
         >
@@ -660,10 +664,8 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
               role="tab"
               aria-selected={viewMode === mode}
               onClick={() => setViewMode(mode)}
-              className={`rounded-xl px-4 py-2 text-sm font-medium whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-                viewMode === mode
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-emerald-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800'
+              className={`segmented-tab text-xs sm:text-sm ${
+                viewMode === mode ? 'segmented-tab-active text-emerald-800 dark:text-emerald-300' : ''
               }`}
             >
               <span className={isBangla ? 'font-bangla' : ''}>{t(`tracker.${mode}`)}</span>
@@ -687,33 +689,36 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
         <div className="space-y-6">
           {/* Profile Card */}
           <div className="card-padded">
-            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl font-bold text-white shadow-md sm:h-20 sm:w-20 sm:text-3xl">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-xl font-bold text-white sm:h-16 sm:w-16 sm:text-2xl dark:bg-emerald-600">
                   {currentProfile.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2
-                      className={`text-2xl font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
-                    >
-                      {currentProfile.name}
-                    </h2>
+                  <h2
+                    className={`text-xl font-bold text-neutral-900 sm:text-2xl dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {currentProfile.name}
+                  </h2>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-neutral-600 sm:text-sm dark:text-neutral-300">
+                    <span>
+                      {language === 'en' ? 'Born' : 'জন্ম'}:{' '}
+                      <span className="tabular-nums">{formatDate(currentProfile.dateOfBirth, language)}</span>
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatAge(currentProfile.dateOfBirth, language)}</span>
                     {currentProfile.relationship && (
-                      <span className="badge-neutral">
-                        {t(`tracker.relationship.${currentProfile.relationship}`)}
-                      </span>
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>{t(`tracker.relationship.${currentProfile.relationship}`)}</span>
+                      </>
                     )}
                     {currentProfile.gender && (
-                      <span className="badge-neutral">
-                        {t(`tracker.gender.${currentProfile.gender}`)}
-                      </span>
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>{t(`tracker.gender.${currentProfile.gender}`)}</span>
+                      </>
                     )}
-                  </div>
-                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    {language === 'en' ? 'Born' : 'জন্ম'}:{' '}
-                    {formatDate(currentProfile.dateOfBirth, language)} ·{' '}
-                    {formatAge(currentProfile.dateOfBirth, language)}
                   </p>
                 </div>
               </div>
@@ -842,8 +847,8 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
             )}
 
             {/* Progress */}
-            <div className="mb-4">
-              <div className="mb-2 flex justify-between text-sm">
+            <div className="mb-5">
+              <div className="mb-1.5 flex justify-between text-xs font-medium">
                 <span
                   className={`text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                 >
@@ -853,63 +858,54 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   {localiseNumber(stats.progressPercentage, language)}%
                 </span>
               </div>
-              <div className="h-3 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
                 <div
-                  className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+                  className="h-full rounded-full bg-emerald-600 transition-all duration-300 dark:bg-emerald-500"
                   style={{ width: `${stats.progressPercentage}%` }}
                 />
               </div>
             </div>
 
             {/* Statistics */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
-              <div className="rounded-xl bg-emerald-50 p-4 text-center dark:bg-emerald-950/40">
-                <CheckCircle2
-                  className="mx-auto mb-2 h-7 w-7 text-emerald-600 dark:text-emerald-400"
-                  aria-hidden="true"
-                />
-                <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                  {localiseNumber(stats.completed, language)}
-                </p>
-                <p
-                  className={`text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 ${isBangla ? 'font-bangla' : ''}`}
+            <dl className="grid grid-cols-3 divide-x divide-neutral-200/80 rounded-xl border border-neutral-200/80 bg-neutral-50/60 dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900/50">
+              <div className="p-3.5 text-center sm:p-4">
+                <dd className="flex items-center justify-center gap-1.5 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{localiseNumber(stats.completed, language)}</span>
+                </dd>
+                <dt
+                  className={`mt-1 text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('tracker.completed')}
-                </p>
+                </dt>
               </div>
-              <div className="rounded-xl bg-blue-50 p-4 text-center dark:bg-blue-950/40">
-                <Clock
-                  className="mx-auto mb-2 h-7 w-7 text-blue-600 dark:text-blue-400"
-                  aria-hidden="true"
-                />
-                <p className="text-2xl font-bold tabular-nums text-blue-700 dark:text-blue-300">
-                  {localiseNumber(stats.upcoming, language)}
-                </p>
-                <p
-                  className={`text-xs sm:text-sm text-blue-700 dark:text-blue-300 ${isBangla ? 'font-bangla' : ''}`}
+              <div className="p-3.5 text-center sm:p-4">
+                <dd className="flex items-center justify-center gap-1.5 text-2xl font-bold tabular-nums text-sky-700 dark:text-sky-400">
+                  <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{localiseNumber(stats.upcoming, language)}</span>
+                </dd>
+                <dt
+                  className={`mt-1 text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('tracker.upcoming')}
-                </p>
+                </dt>
               </div>
-              <div className="rounded-xl bg-red-50 p-4 text-center dark:bg-red-950/40">
-                <AlertCircle
-                  className="mx-auto mb-2 h-7 w-7 text-red-600 dark:text-red-400"
-                  aria-hidden="true"
-                />
-                <p className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-300">
-                  {localiseNumber(stats.overdue, language)}
-                </p>
-                <p
-                  className={`text-xs sm:text-sm text-red-700 dark:text-red-300 ${isBangla ? 'font-bangla' : ''}`}
+              <div className="p-3.5 text-center sm:p-4">
+                <dd className="flex items-center justify-center gap-1.5 text-2xl font-bold tabular-nums text-red-700 dark:text-red-400">
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{localiseNumber(stats.overdue, language)}</span>
+                </dd>
+                <dt
+                  className={`mt-1 text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('tracker.overdue')}
-                </p>
+                </dt>
               </div>
-            </div>
+            </dl>
 
             {/* Schedule Intelligence & Clinical Limitations */}
             {scheduleAnalysis && (
-              <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-950/50">
+              <div className="mt-6 border-t border-neutral-200/80 pt-5 dark:border-neutral-800">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3
@@ -941,7 +937,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   </button>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200/80 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200/80 bg-neutral-50/70 px-3.5 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/50">
                   <span className={`font-medium text-neutral-700 dark:text-neutral-200 ${isBangla ? 'font-bangla' : ''}`}>
                     {t('tracker.intelligence.dueProgress')}:{' '}
                     <strong className="tabular-nums text-emerald-700 dark:text-emerald-400">
@@ -962,8 +958,8 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   </span>
                 </div>
 
-                <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
-                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="mt-3 grid gap-px overflow-hidden rounded-lg border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-2 lg:grid-cols-5 dark:border-neutral-800 dark:bg-neutral-800">
+                  <div className="bg-white p-3 dark:bg-neutral-950/60">
                     <p className={`text-xs font-semibold text-emerald-700 dark:text-emerald-400 ${isBangla ? 'font-bangla' : ''}`}>
                       {t('tracker.intelligence.bucketCompleted')}
                     </p>
@@ -979,7 +975,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="bg-white p-3 dark:bg-neutral-950/60">
                     <p className={`text-xs font-semibold text-sky-700 dark:text-sky-400 ${isBangla ? 'font-bangla' : ''}`}>
                       {t('tracker.intelligence.bucketUpcoming')}
                     </p>
@@ -998,7 +994,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="bg-white p-3 dark:bg-neutral-950/60">
                     <p className={`text-xs font-semibold text-red-700 dark:text-red-400 ${isBangla ? 'font-bangla' : ''}`}>
                       {t('tracker.intelligence.bucketOverdue')}
                     </p>
@@ -1010,7 +1006,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="bg-white p-3 dark:bg-neutral-950/60">
                     <p className={`text-xs font-semibold text-amber-700 dark:text-amber-400 ${isBangla ? 'font-bangla' : ''}`}>
                       {t('tracker.intelligence.bucketUncertain')}
                     </p>
@@ -1026,7 +1022,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-neutral-200/80 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="bg-white p-3 dark:bg-neutral-950/60">
                     <p className={`text-xs font-semibold text-neutral-700 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}>
                       {t('tracker.intelligence.bucketHcw')}
                     </p>
@@ -1211,7 +1207,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                   {getAchievements(currentProfile).map((achievement) => (
                     <div
                       key={`${achievement.icon}-${achievement.title}`}
-                      className="flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-100 to-yellow-100 px-4 py-2 text-sm font-semibold text-amber-900 dark:from-amber-950/60 dark:to-yellow-950/50 dark:text-amber-200"
+                      className="flex items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
                     >
                       <span>{achievement.icon}</span>
                       <span className={isBangla ? 'font-bangla' : ''}>{achievement.title}</span>
@@ -1338,71 +1334,70 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
             </p>
           ) : (
             <div className="relative">
-              <div className="absolute top-0 bottom-0 left-7 w-0.5 bg-gradient-to-b from-emerald-500 via-teal-500 to-cyan-500 sm:left-8" />
+              <div className="absolute top-0 bottom-0 left-6 w-px bg-neutral-200 sm:left-7 dark:bg-neutral-800" />
 
               <div className="space-y-4">
                 {familyTimeline.slice(0, 20).map((event, index) => (
                   <div
                     key={`${event.profileId}-${event.vaccineId}-${event.date}-${index}`}
-                    className="relative flex gap-4 sm:gap-6 animate-slide-in-right"
-                    style={{ animationDelay: `${index * 0.04}s` }}
+                    className="relative flex gap-4 sm:gap-5"
                   >
                     <div className="relative z-10 shrink-0">
                       <div
-                        className={`flex h-14 w-14 items-center justify-center rounded-full shadow-md sm:h-16 sm:w-16 ${
+                        className={`flex h-12 w-12 items-center justify-center rounded-xl border sm:h-14 sm:w-14 ${
                           event.status === 'completed'
-                            ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300'
                             : event.status === 'overdue'
-                              ? 'bg-gradient-to-br from-red-500 to-pink-600'
+                              ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/70 dark:text-red-300'
                               : event.status === 'due-today'
-                                ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                                : 'bg-gradient-to-br from-blue-500 to-cyan-600'
+                                ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-300'
+                                : 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/70 dark:text-sky-300'
                         }`}
                       >
                         {event.status === 'completed' ? (
-                          <CheckCircle2 className="h-7 w-7 text-white" />
+                          <CheckCircle2 className="h-5 w-5" />
                         ) : event.status === 'overdue' ? (
-                          <AlertCircle className="h-7 w-7 text-white" />
+                          <AlertCircle className="h-5 w-5" />
                         ) : (
-                          <Clock className="h-7 w-7 text-white" />
+                          <Clock className="h-5 w-5" />
                         )}
                       </div>
                     </div>
 
-                    <div className="flex-1 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-800/50">
+                    <div className="flex-1 rounded-xl border border-neutral-200/80 bg-neutral-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <h3
-                            className={`font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                            className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                           >
                             {event.doseLabel?.[language] ?? event.vaccineName[language]}
                             {event.scheduled === false && typeof event.doseNumber === 'number' && (
-                              <span className="ml-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                              <span className="ml-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
                                 · {t('tracker.dose.number', event.doseNumber)}
                               </span>
                             )}
                             {event.scheduled === false && (
-                              <span className="badge badge-neutral ml-2 align-middle">
-                                {t('tracker.dose.offSchedule')}
+                              <span className="ml-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                                · {t('tracker.dose.offSchedule')}
                               </span>
                             )}
                           </h3>
                           <p
-                            className={`text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                            className={`mt-0.5 text-xs text-neutral-600 tabular-nums dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                           >
-                            {event.profileName} • {formatDate(event.date, language)}
+                            {event.profileName} · {formatDate(event.date, language)}
                           </p>
                         </div>
                         <span
-                          className={
+                          className={`text-xs font-semibold ${
                             event.status === 'completed'
-                              ? 'badge-done'
+                              ? 'text-emerald-700 dark:text-emerald-400'
                               : event.status === 'overdue'
-                                ? 'badge-overdue'
+                                ? 'text-red-700 dark:text-red-400'
                                 : event.status === 'due-today'
-                                  ? 'badge-due'
-                                  : 'badge-upcoming'
-                          }
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : 'text-sky-700 dark:text-sky-400'
+                          }`}
                         >
                           {event.status === 'completed'
                             ? t('tracker.status.completed')
@@ -1525,12 +1520,12 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
               {catchUpPlan.map((plan, index) => (
                 <div
                   key={`${plan.vaccineId}-${index}`}
-                  className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950/30"
+                  className="rounded-xl border border-amber-300/90 bg-amber-50/50 p-5 dark:border-amber-800/80 dark:bg-amber-950/25"
                 >
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h3
-                        className={`mb-1 text-xl font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                        className={`mb-1 text-lg font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                       >
                         {plan.vaccineName[language]}
                       </h3>

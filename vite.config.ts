@@ -7,8 +7,14 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 function resolveBase(): string {
-  const raw = process.env.VITE_BASE || '/';
-  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  let raw = process.env.VITE_BASE?.trim();
+  if (!raw && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_REPOSITORY) {
+    const [owner = '', repo = ''] = process.env.GITHUB_REPOSITORY.split('/');
+    raw =
+      repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io` ? '/' : repo ? `/${repo}/` : '/';
+  }
+  const normalized = raw || '/';
+  const withLeadingSlash = normalized.startsWith('/') ? normalized : `/${normalized}`;
   return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
@@ -43,6 +49,11 @@ function spaFallback(): Plugin {
         type: 'asset',
         fileName: '404.html',
         source: template.split('{{BASE}}').join(base),
+      });
+      this.emitFile({
+        type: 'asset',
+        fileName: '.nojekyll',
+        source: '',
       });
     },
   };
@@ -100,7 +111,9 @@ function pwaAssets(): Plugin {
         source: await renderManifest(),
       });
 
-      const emitted = Object.keys(bundle).filter((name) => !name.endsWith('.map'));
+      const emitted = Object.keys(bundle).filter(
+        (name) => !name.endsWith('.map') && name !== '.nojekyll',
+      );
       const shellFiles = [
         ...new Set([
           ...emitted.map((name) => `/${name}`),

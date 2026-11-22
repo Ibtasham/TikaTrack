@@ -167,32 +167,37 @@ export default function VaccineDetailPage() {
         {t('common.actions.back')}
       </Link>
 
-      {/* --- Header -------------------------------------------------------- */}
-      <header className={`card overflow-hidden print-area ${colour.bg}`}>
+      {/* --- Clinical Monograph Header ------------------------------------- */}
+      <header className="card overflow-hidden print-area">
+        <div className={`h-1.5 w-full ${colour.bg}`} aria-hidden="true" />
         <div className="p-6 sm:p-8">
           <div className="flex items-start gap-4">
-            <span className="text-4xl sm:text-5xl" aria-hidden="true">
+            <span
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-neutral-200/90 bg-neutral-50 text-2xl sm:h-14 sm:w-14 sm:text-3xl dark:border-neutral-800 dark:bg-neutral-800/60"
+              aria-hidden="true"
+            >
               {vaccine.icon}
             </span>
             <div className="min-w-0">
+              <p className="eyebrow">
+                {evidence
+                  ? t(`vaccines.programme.${evidence.programme}`)
+                  : t(`vaccines.category.${vaccine.category}`)}
+              </p>
               <h1
-                className={`text-2xl font-extrabold sm:text-3xl ${colour.text} ${isBangla ? 'font-bangla' : ''}`}
+                className={`mt-1 text-2xl font-extrabold tracking-tight text-neutral-900 sm:text-3xl dark:text-white ${isBangla ? 'font-bangla' : ''}`}
               >
                 {vaccine.name[language]}
               </h1>
               <p
-                className={`mt-1 text-sm ${colour.text} opacity-90 ${isBangla ? 'font-bangla' : ''}`}
+                className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
               >
                 {vaccine.fullName[language]}
               </p>
               <p
-                className={`mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium ${colour.text} opacity-95 tabular-nums`}
+                className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium text-neutral-500 tabular-nums dark:text-neutral-400"
               >
-                <span>
-                  {evidence
-                    ? t(`vaccines.programme.${evidence.programme}`)
-                    : t(`vaccines.category.${vaccine.category}`)}
-                </span>
+                <span>{t(`vaccines.category.${vaccine.category}`)}</span>
                 <span aria-hidden="true">·</span>
                 <span>
                   {evidence && !evidence.publishable
@@ -202,7 +207,7 @@ export default function VaccineDetailPage() {
                 {vaccine.efficacy && (
                   <>
                     <span aria-hidden="true">·</span>
-                    <span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                       {t('vaccines.efficacy')}: {vaccine.efficacy}
                     </span>
                   </>
@@ -246,7 +251,7 @@ export default function VaccineDetailPage() {
       )}
 
       {/* --- Quick facts --------------------------------------------------- */}
-      <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-5 grid gap-px overflow-hidden rounded-xl border border-neutral-200/90 bg-neutral-200/80 sm:grid-cols-2 lg:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-800">
         {[
           {
             icon: ShieldAlert,
@@ -261,15 +266,15 @@ export default function VaccineDetailPage() {
           { icon: Info, label: t('vaccines.detail.ageGroup'), value: vaccine.ageGroup },
           { icon: Check, label: t('vaccines.detail.introduced'), value: vaccine.introduced },
         ].map(({ icon: Icon, label, value }) => (
-          <div key={label} className="card-padded">
+          <div key={label} className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
             <dt
-              className={`flex items-center gap-2 text-xs font-medium text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+              className={`flex items-center gap-2 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
               {label}
             </dt>
             <dd
-              className={`mt-2 text-sm font-medium text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+              className={`mt-2 text-sm font-semibold text-neutral-900 tabular-nums dark:text-white ${isBangla ? 'font-bangla' : ''}`}
             >
               {value || '—'}
             </dd>
@@ -393,7 +398,7 @@ export default function VaccineDetailPage() {
             {t('vaccines.detail.clinicalSpecs')}
           </h2>
 
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <dl className="mt-4 grid gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-2 dark:border-neutral-800 dark:bg-neutral-800">
             {[
               {
                 icon: FlaskConical,
@@ -428,10 +433,10 @@ export default function VaccineDetailPage() {
             ].map(({ icon: Icon, label, value }) => (
               <div
                 key={label}
-                className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 dark:border-neutral-800 dark:bg-neutral-800/50"
+                className="bg-white p-4 dark:bg-neutral-900/95"
               >
                 <dt
-                  className={`flex items-center gap-1.5 text-xs font-semibold text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                  className={`flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   <Icon className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                   {label}
@@ -536,7 +541,7 @@ export default function VaccineDetailPage() {
             {t('vaccines.evidence.subtitle')}
           </p>
 
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <dl className="mt-4 grid gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 sm:grid-cols-2 dark:border-neutral-800 dark:bg-neutral-800">
             {[
               {
                 label: t('vaccines.evidence.programme'),
@@ -571,9 +576,9 @@ export default function VaccineDetailPage() {
                 value: evidence.record?.id ?? evidence.legacyId,
               },
             ].map(({ label, value }) => (
-              <div key={label} className="rounded-xl bg-neutral-100 p-3 dark:bg-neutral-800/60">
+              <div key={label} className="bg-white p-3.5 dark:bg-neutral-900/95">
                 <dt
-                  className={`text-xs font-medium text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                  className={`text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {label}
                 </dt>

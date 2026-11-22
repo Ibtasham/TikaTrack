@@ -10,6 +10,7 @@ import {
   Download,
   Filter,
   Printer,
+  Syringe,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -238,8 +239,8 @@ export default function ScheduleTimeline() {
       case 'active-stage':
         return {
           label: t('schedule.activeStage'),
-          dotClass: 'bg-emerald-600 ring-4 ring-emerald-500/20 dark:bg-emerald-500',
-          borderClass: 'border-2 border-emerald-500 dark:border-emerald-500',
+          dotClass: 'bg-emerald-600 ring-4 ring-emerald-500/15 dark:bg-emerald-500',
+          borderClass: 'border-emerald-400 ring-1 ring-emerald-500/20 dark:border-emerald-600',
           textClass: 'text-emerald-700 dark:text-emerald-300',
           icon: <Compass className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />,
         };
@@ -247,7 +248,7 @@ export default function ScheduleTimeline() {
         return {
           label: t('schedule.overdue'),
           dotClass: 'bg-red-600 dark:bg-red-500',
-          borderClass: 'border-2 border-red-300 dark:border-red-800',
+          borderClass: 'border-red-300 dark:border-red-800',
           textClass: 'text-red-700 dark:text-red-300',
           icon: <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />,
         };
@@ -255,7 +256,7 @@ export default function ScheduleTimeline() {
         return {
           label: t('schedule.dueToday'),
           dotClass: 'bg-amber-600 dark:bg-amber-500',
-          borderClass: 'border-2 border-amber-300 dark:border-amber-800',
+          borderClass: 'border-amber-300 dark:border-amber-800',
           textClass: 'text-amber-700 dark:text-amber-300',
           icon: <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />,
         };
@@ -344,19 +345,15 @@ export default function ScheduleTimeline() {
   return (
     <div className="animate-slide-up">
       {/* --- Header -------------------------------------------------------- */}
-      <header className="mb-8">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <Calendar className="h-4 w-4" aria-hidden="true" />
-          {t('nav.schedule')}
+      <header className="mb-8 border-b border-neutral-200/80 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{t('nav.schedule')}</span>
         </p>
-        <h1
-          className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}
-        >
+        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
           {t('schedule.title')}
         </h1>
-        <p
-          className={`section-subtitle max-w-3xl ${isBangla ? 'font-bangla' : ''}`}
-        >
+        <p className={`section-subtitle max-w-3xl ${isBangla ? 'font-bangla' : ''}`}>
           {t('schedule.subtitleLifespan')}
         </p>
       </header>
@@ -407,24 +404,24 @@ export default function ScheduleTimeline() {
           </div>
 
           {age && (
-            <div className="flex items-center gap-4 rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="flex items-center gap-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 dark:border-emerald-900/70 dark:bg-emerald-950/30">
               <div className="min-w-0 flex-1">
                 <p
-                  className={`text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                  className={`text-[11px] font-semibold tracking-wide text-neutral-600 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('schedule.currentAge')}
                 </p>
-                <p className="truncate text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
+                <p className="mt-0.5 truncate text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
                   {formatAge(effectiveDob, language)}
                 </p>
               </div>
-              <div className="text-right">
+              <div className="border-l border-emerald-200/80 pl-4 text-right dark:border-emerald-900/60">
                 <p
-                  className={`text-xs font-medium text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                  className={`text-[11px] font-semibold tracking-wide text-neutral-600 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                 >
                   {t('schedule.progress')}
                 </p>
-                <p className="text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
+                <p className="mt-0.5 text-lg font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
                   {localiseNumber(progressPercentage, language)}%
                 </p>
               </div>
@@ -435,7 +432,7 @@ export default function ScheduleTimeline() {
         {isInvalidOrFutureDob && (
           <p
             role="alert"
-            className={`mt-3 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-200 ${isBangla ? 'font-bangla' : ''}`}
+            className={`mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 ${isBangla ? 'font-bangla' : ''}`}
           >
             {t('schedule.invalidDob')}
           </p>
@@ -443,10 +440,10 @@ export default function ScheduleTimeline() {
 
         {/* Progress Bar */}
         {age && (
-          <div className="mt-4">
-            <div className="h-2.5 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
+          <div className="mt-5">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
               <div
-                className="h-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+                className="h-full rounded-full bg-emerald-600 transition-all duration-500 dark:bg-emerald-500"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
@@ -547,7 +544,7 @@ export default function ScheduleTimeline() {
         <div
           role="group"
           aria-label={t('schedule.filter')}
-          className="flex flex-wrap gap-1.5 rounded-xl border border-neutral-200 bg-neutral-100/80 p-1.5 dark:border-neutral-800 dark:bg-neutral-900"
+          className="segmented-group flex w-full flex-wrap"
         >
           {LIFE_STAGE_OPTIONS.map((option) => {
             const active = stageFilter === option.key;
@@ -558,16 +555,16 @@ export default function ScheduleTimeline() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => setStageFilter(option.key)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                className={`segmented-tab shrink-0 ${
                   active
-                    ? 'bg-white text-emerald-700 shadow-sm dark:bg-neutral-800 dark:text-emerald-300'
+                    ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300'
                     : isCurrent
-                      ? 'text-emerald-700 hover:bg-white/60 dark:text-emerald-400 dark:hover:bg-neutral-800/60'
-                      : 'text-neutral-600 hover:bg-white/60 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800/60 dark:hover:text-white'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : ''
                 } ${isBangla ? 'font-bangla' : ''}`}
               >
                 {t(option.labelKey)}
-                <span className="ml-1.5 text-[11px] opacity-70 tabular-nums">
+                <span className="ml-1 text-[11px] opacity-70 tabular-nums">
                   {option.ageBand[language]}
                 </span>
               </button>
@@ -575,27 +572,27 @@ export default function ScheduleTimeline() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Filter className="h-4 w-4 text-neutral-500 dark:text-neutral-400" aria-hidden="true" />
-            {PROGRAMME_SCOPES.map((scope) => {
-              const active = programmeScope === scope;
-              return (
-                <button
-                  key={scope}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setProgrammeScope(scope)}
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                    active
-                      ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500'
-                      : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300'
-                  } ${isBangla ? 'font-bangla' : ''}`}
-                >
-                  {t(`schedule.scope.${scope}`)}
-                </button>
-              );
-            })}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" aria-hidden="true" />
+            <div className="segmented-group">
+              {PROGRAMME_SCOPES.map((scope) => {
+                const active = programmeScope === scope;
+                return (
+                  <button
+                    key={scope}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setProgrammeScope(scope)}
+                    className={`segmented-tab shrink-0 ${
+                      active ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300' : ''
+                    } ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t(`schedule.scope.${scope}`)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -791,8 +788,19 @@ export default function ScheduleTimeline() {
                               tabIndex={vaccineData ? 0 : undefined}
                               className={`flex items-start gap-3 text-left ${vaccineData ? 'cursor-pointer' : ''}`}
                             >
-                              <span className="text-2xl leading-none" aria-hidden="true">
-                                {vaccineData?.icon || '💉'}
+                              <span
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+                                  isRecorded
+                                    ? 'border-emerald-200 bg-emerald-100/80 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+                                    : 'border-neutral-200 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {isRecorded ? (
+                                  <CheckCircle2 className="h-4 w-4" />
+                                ) : (
+                                  <Syringe className="h-4 w-4" />
+                                )}
                               </span>
                               <div className="min-w-0 flex-1">
                                 <p className={`text-sm font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>

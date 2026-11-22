@@ -29,6 +29,7 @@ import {
 import { ChildGrowthTracker } from '../components/ChildGrowthTracker';
 import { PageSkeleton } from '../components/Skeleton';
 import { useProfiles } from '../contexts/ProfilesContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
 import { allVaccines } from '../data/vaccines';
@@ -62,9 +63,26 @@ const ACTIVITY_MONTHS = 12;
  */
 export default function AnalyticsPage() {
   const { t, language } = useI18n();
+  const { theme } = useTheme();
   const { profiles, ready } = useProfiles();
   const toast = useToast();
   const isBangla = language === 'bn';
+  const isDark = theme === 'dark';
+
+  const chartTheme = useMemo(
+    () => ({
+      gridStroke: isDark ? '#262626' : '#e5e5e5',
+      tickColor: isDark ? '#a3a3a3' : '#525252',
+      tooltipStyle: {
+        backgroundColor: isDark ? '#171717' : '#ffffff',
+        borderColor: isDark ? '#262626' : '#e5e5e5',
+        borderRadius: '0.5rem',
+        fontSize: '12px',
+        color: isDark ? '#f5f5f5' : '#171717',
+      },
+    }),
+    [isDark],
+  );
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const printRef = useRef<HTMLDivElement>(null);
@@ -269,9 +287,9 @@ export default function AnalyticsPage() {
 
   return (
     <div className="page-shell">
-      <header className="no-print">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <BarChart3 className="h-4 w-4" aria-hidden="true" />
+      <header className="no-print border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
           {t('nav.analytics')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -320,17 +338,17 @@ export default function AnalyticsPage() {
       </p>
 
       <div ref={printRef} className="print-area">
-        {/* --- Stat cards -------------------------------------------------- */}
-        <dl className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {/* --- Stat strip (unified hairline grid) --------------------------- */}
+        <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 lg:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-800">
           {statCards.map(({ key, value, icon: Icon, tone }) => (
-            <div key={key} className="card-padded">
+            <div key={key} className="bg-white p-4 sm:p-5 dark:bg-neutral-900">
               <dt
-                className={`flex items-center gap-2 text-xs font-medium text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                className={`flex items-center gap-2 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
               >
-                <Icon className={`h-4 w-4 ${tone}`} aria-hidden="true" />
+                <Icon className={`h-3.5 w-3.5 ${tone}`} aria-hidden="true" />
                 {t(key)}
               </dt>
-              <dd className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">
+              <dd className="mt-2 text-2xl font-bold tracking-tight tabular-nums text-neutral-900 sm:text-3xl dark:text-white">
                 {localiseNumber(value, language)}
               </dd>
             </div>
@@ -350,7 +368,7 @@ export default function AnalyticsPage() {
           </h2>
           <div className="mt-4 flex items-center gap-4">
             <div
-              className="h-3 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
+              className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
               role="progressbar"
               aria-valuenow={totals.progress}
               aria-valuemin={0}
@@ -358,11 +376,11 @@ export default function AnalyticsPage() {
               aria-label={t('analytics.stats.overall')}
             >
               <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
+                className="h-full rounded-full bg-emerald-600 transition-all"
                 style={{ width: `${totals.progress}%` }}
               />
             </div>
-            <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+            <span className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               {localiseNumber(totals.progress, language)}%
             </span>
           </div>
@@ -405,8 +423,8 @@ export default function AnalyticsPage() {
                         <Cell key={entry.name} fill={entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip />
-                    <Legend />
+                    <Tooltip contentStyle={chartTheme.tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -429,11 +447,11 @@ export default function AnalyticsPage() {
               <div className="mt-4 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={memberData} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Legend />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.gridStroke} vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartTheme.tickColor }} />
+                    <YAxis tick={{ fontSize: 11, fill: chartTheme.tickColor }} allowDecimals={false} />
+                    <Tooltip contentStyle={chartTheme.tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
                     <Bar
                       dataKey="completed"
                       name={t('analytics.legend.completed')}
@@ -444,7 +462,7 @@ export default function AnalyticsPage() {
                       dataKey="remaining"
                       name={t('analytics.legend.upcoming')}
                       stackId="a"
-                      fill="#a7f3d0"
+                      fill={isDark ? '#065f46' : '#a7f3d0'}
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
@@ -462,10 +480,10 @@ export default function AnalyticsPage() {
             <div className="mt-4 h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={activityData} margin={{ top: 8, right: 8, bottom: 8, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.gridStroke} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartTheme.tickColor }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11, fill: chartTheme.tickColor }} allowDecimals={false} />
+                  <Tooltip contentStyle={chartTheme.tooltipStyle} />
                   <Line
                     type="monotone"
                     dataKey="doses"
@@ -499,10 +517,10 @@ export default function AnalyticsPage() {
                     layout="vertical"
                     margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" horizontal={false} />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                    <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(value) => `${value}%`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.gridStroke} horizontal={false} />
+                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: chartTheme.tickColor }} unit="%" />
+                    <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: chartTheme.tickColor }} />
+                    <Tooltip contentStyle={chartTheme.tooltipStyle} formatter={(value) => `${value}%`} />
                     <Bar
                       dataKey="percent"
                       name={t('analytics.legend.completed')}
@@ -594,15 +612,25 @@ export default function AnalyticsPage() {
                     </td>
                     <td className="px-4 py-3">
                       {stats.overdue > 0 ? (
-                        <span className="badge-overdue">
+                        <span className="status-inline text-red-700 dark:text-red-400">
+                          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                           {t('tracker.status.overdue')} · {localiseNumber(stats.overdue, language)}
                         </span>
                       ) : stats.dueToday > 0 ? (
-                        <span className="badge-due">{t('tracker.status.dueToday')}</span>
+                        <span className="status-inline text-amber-700 dark:text-amber-400">
+                          <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {t('tracker.status.dueToday')}
+                        </span>
                       ) : next ? (
-                        <span className="badge-upcoming">{t('tracker.status.upcoming')}</span>
+                        <span className="status-inline text-sky-700 dark:text-sky-400">
+                          <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {t('tracker.status.upcoming')}
+                        </span>
                       ) : (
-                        <span className="badge-done">{t('tracker.status.noneDue')}</span>
+                        <span className="status-inline text-emerald-700 dark:text-emerald-400">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {t('tracker.status.noneDue')}
+                        </span>
                       )}
                     </td>
                   </tr>

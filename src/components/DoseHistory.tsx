@@ -154,8 +154,8 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
   if (events.length === 0) {
     return (
       <div className={`card-padded ${className}`}>
-        <h3 className={`section-title flex items-center gap-2 ${isBangla ? 'font-bangla' : ''}`}>
-          <History className="h-4 w-4" aria-hidden="true" />
+        <h3 className={`flex items-center gap-2 text-base font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+          <History className="h-4 w-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
           {t('tracker.dose.history.title')}
         </h3>
         <p
@@ -169,13 +169,13 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
 
   return (
     <div className={`card-padded ${className}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className={`section-title flex items-center gap-2 ${isBangla ? 'font-bangla' : ''}`}>
-          <History className="h-4 w-4" aria-hidden="true" />
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-neutral-200/80 pb-3 dark:border-neutral-800">
+        <h3 className={`flex items-center gap-2 text-base font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}>
+          <History className="h-4 w-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
           {t('tracker.dose.history.title')}
         </h3>
         <p
-          className={`text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+          className={`text-xs font-medium tabular-nums text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
         >
           {t('tracker.dose.history.count', events.length)}
         </p>
@@ -220,7 +220,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
               </div>
             </header>
 
-            <ul className="mt-2 space-y-2">
+            <ul className="mt-2 divide-y divide-neutral-200/70 dark:divide-neutral-800">
               {group.rows.map((event) => {
                 const isEditing = editingId === event.id;
                 const milestoneOptions = milestoneDoses(event.vaccineId);
@@ -233,10 +233,10 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                 return (
                   <li
                     key={event.id}
-                    className={`rounded-xl border p-3 ${
+                    className={`py-3 ${
                       event.needsReview
-                        ? 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20'
-                        : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+                        ? 'rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 my-1.5 dark:border-amber-900/60 dark:bg-amber-950/20'
+                        : ''
                     }`}
                   >
                     {isEditing && draft ? (
@@ -395,17 +395,18 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p
-                            className={`font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                            className={`text-sm font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                           >
                             {doseLabel(event)}
                             {event.doseNumber === null && (
-                              <span className="badge badge-neutral ml-2 align-middle">
-                                {t('tracker.dose.unnumbered')}
+                              <span className="ml-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                <span aria-hidden="true">· </span>
+                                <span>{t('tracker.dose.unnumbered')}</span>
                               </span>
                             )}
                           </p>
                           <p
-                            className={`mt-0.5 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                            className={`mt-0.5 text-sm text-neutral-600 tabular-nums dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                           >
                             {formatDate(event.date, language)}
                             {event.centre ? ` · ${event.centre}` : ''}
@@ -414,18 +415,23 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                           </p>
                           {event.notes && (
                             <p
-                              className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                              className={`mt-1 text-xs text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
                             >
                               {event.notes}
                             </p>
                           )}
                           <p
-                            className={`mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                            className={`mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
                           >
-                            <span className="badge badge-neutral">
-                              {t(`tracker.dose.provenance.${event.provenance}`)}
-                            </span>
-                            {event.updatedAt && <span>{t('tracker.dose.corrected')}</span>}
+                            <span>{t(`tracker.dose.provenance.${event.provenance}`)}</span>
+                            {event.updatedAt && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-medium text-neutral-600 dark:text-neutral-300">
+                                  {t('tracker.dose.corrected')}
+                                </span>
+                              </>
+                            )}
                           </p>
 
                           {event.needsReview && (

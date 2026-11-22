@@ -154,9 +154,9 @@ export default function PrivacyPage() {
 
   return (
     <div className="page-shell max-w-4xl">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+      <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
           {t('nav.privacy')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -199,11 +199,11 @@ export default function PrivacyPage() {
               </dd>
             </div>
             <div className="sm:col-span-2">
-              <span className="badge-neutral">
+              <span className="status-inline text-neutral-700 dark:text-neutral-200">
                 {backend === 'firebase' || backend === 'supabase' ? (
-                  <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Cloud className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" aria-hidden="true" />
                 ) : (
-                  <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+                  <HardDrive className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 )}
                 {backend === 'firebase'
                   ? t('auth.cloudMode', 'Google Cloud · Firebase')
@@ -239,16 +239,18 @@ export default function PrivacyPage() {
           {t('privacy.data')}
         </h2>
 
-        <dl className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <dl className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 dark:border-neutral-800 dark:bg-neutral-800">
           {[
             { label: t('tracker.title'), value: String(profiles.length) },
             { label: t('tracker.stats.doses'), value: String(doseCount) },
             { label: t('tracker.stats.storageKeys'), value: String(usage.keys) },
           ].map(({ label, value }) => (
-            <div key={label} className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-800">
-              <dd className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{value}</dd>
+            <div key={label} className="bg-white p-3.5 sm:p-4 dark:bg-neutral-900">
+              <dd className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                {value}
+              </dd>
               <dt
-                className={`mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                className={`mt-1 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
               >
                 {label}
               </dt>

@@ -295,9 +295,9 @@ export default function PassportPage() {
 
   return (
     <div className="page-shell max-w-5xl">
-      <header className="no-print">
-        <p className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400">
-          <IdCard className="h-4 w-4" aria-hidden="true" />
+      <header className="no-print border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="eyebrow">
+          <IdCard className="h-3.5 w-3.5" aria-hidden="true" />
           {t('nav.passport')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
@@ -356,9 +356,9 @@ export default function PassportPage() {
                         key={member.id}
                         type="button"
                         onClick={() => setProfileId(member.id)}
-                        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors ${
                           isSelected
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+                            ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-100'
                             : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
                         }`}
                       >
@@ -621,10 +621,10 @@ export default function PassportPage() {
                 )}
                 <div
                   ref={setPrintRef}
-                  className="print-area overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+                  className="print-area overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
                 >
                   {/* Passport Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-emerald-800 to-emerald-700 px-5 py-4 text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800 bg-emerald-900 px-5 py-4 text-white dark:bg-emerald-950">
                     <div>
                       <p className="text-[11px] font-semibold tracking-widest text-emerald-200 uppercase">
                         TikaTrack · {t('passport.certificate')}
