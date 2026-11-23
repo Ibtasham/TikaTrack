@@ -9,7 +9,12 @@ describe('resolveFirebaseConfig', () => {
     expect(setup.source).toBe('bundled');
     expect(setup.options.projectId).toBe(bundledConfig.projectId);
     expect(setup.options.authDomain).toBe(bundledConfig.authDomain);
-    expect(setup.firestoreDatabaseId).toBe(bundledConfig.firestoreDatabaseId);
+    const expectedDb =
+      bundledConfig.firestoreDatabaseId && bundledConfig.firestoreDatabaseId !== '(default)'
+        ? bundledConfig.firestoreDatabaseId
+        : undefined;
+    expect(setup.firestoreDatabaseId).toBe(expectedDb);
+    expect(setup.options.projectId).toBe('tikatrack-7680c');
   });
 
   it('ignores partial overrides so credentials from different projects are never mixed', () => {
