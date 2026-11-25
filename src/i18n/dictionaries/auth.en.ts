@@ -75,4 +75,12 @@ export const en: TranslationDictionary = {
     'Your child profiles, dose events, and WHO growth logs sync automatically between this browser, Cloud Firestore, and Cloud SQL.',
   'auth.orOfflineAccount': 'or use an offline browser account',
   'auth.profilesCount': '{0} family profiles',
+  'auth.biometric.title': 'Mobile Biometric Passport',
+  'auth.biometric.enrolledBody':
+    'Passkey enrolled on {0}. Verify with biometrics to unlock and view your vaccination passport.',
+  'auth.biometric.readyBody':
+    'Use your phone’s Face ID, Touch ID, or fingerprint sensor as a local passkey to lock digital QR passports.',
+  'auth.biometric.unlockPassport': 'Unlock & Open Passport',
+  'auth.biometric.managePassport': 'Manage Passport Lock',
+  'auth.biometric.setupPassport': 'Set Up Biometric Lock',
 };

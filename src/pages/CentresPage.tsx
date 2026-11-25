@@ -852,12 +852,12 @@ export default function CentresPage() {
           )}
 
           {areaOrigin && !userCoords && (
-            <span className="badge-done">
-              <MapPin className="h-3 w-3" aria-hidden="true" />
-              {t('centres.areaSearch.originBadge', areaOrigin.label)}
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{t('centres.areaSearch.originBadge', areaOrigin.label)}</span>
               <button
                 type="button"
-                className="ml-1 rounded hover:text-emerald-950 dark:hover:text-white"
+                className="rounded p-0.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
                 onClick={() => handleAreaOriginSelect(null)}
                 aria-label={t('centres.areaSearch.clearOrigin')}
               >
@@ -878,7 +878,7 @@ export default function CentresPage() {
             </span>
           </label>
 
-          <span className="font-medium text-neutral-600 dark:text-neutral-300">
+          <span className="font-medium tabular-nums text-neutral-600 dark:text-neutral-300">
             {t('centres.totalFound', results.length)}
           </span>
 

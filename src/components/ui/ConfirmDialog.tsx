@@ -59,14 +59,14 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby={description ? 'confirm-dialog-description' : undefined}
-        className="animate-scale-in relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className="animate-scale-in relative w-full max-w-md rounded-2xl border border-[var(--tt-border)] bg-[var(--tt-card)] p-6 shadow-2xl"
       >
         <div className="flex items-start gap-4">
           <span
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
               tone === 'danger'
                 ? 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400'
-                : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400'
+                : 'bg-[var(--tt-accent-soft)] text-[var(--tt-accent-ink)]'
             }`}
           >
             <AlertTriangle className="h-6 w-6" aria-hidden="true" />
@@ -74,14 +74,14 @@ export function ConfirmDialog({
           <div className="min-w-0">
             <h2
               id="confirm-dialog-title"
-              className="text-lg font-bold text-neutral-900 dark:text-neutral-50"
+              className="text-lg font-bold text-[var(--tt-ink)]"
             >
               {title}
             </h2>
             {description ? (
               <div
                 id="confirm-dialog-description"
-                className="mt-1 text-sm text-neutral-600 dark:text-neutral-300"
+                className="mt-1 text-sm text-[var(--tt-ink-muted)]"
               >
                 {description}
               </div>

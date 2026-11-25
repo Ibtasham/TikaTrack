@@ -4,17 +4,20 @@ Bilingual (English & Bangla) immunization companion built for Bangladesh's EPI s
 
 ## Core Capabilities
 
-- **Lifespan Immunization Schedule & Family Tracker**: Tracks individual dose events (`VaccinationEvent` ledger) across birth, EPI childhood milestones, school-age boosters, adult/maternal immunization, and older-adult vaccines.
+- **Lifespan Immunization Schedule & Family Tracker**: Tracks individual dose events (`VaccinationEvent` ledger) across birth, EPI childhood milestones, school-age boosters, adult/maternal immunization, and older-adult vaccines, with tactile haptic confirmation on mobile devices.
+- **Family Hub Dashboard & Vaccine Countdown**: Displays live time remaining to the primary profile's next scheduled EPI dose, interactive Recharts family vaccination progress over time, antigen protection coverage, and clinic visit bundling.
 - **WHO Child & Adolescent Growth Tracker**: Interactive Recharts percentiles against WHO 0–60 month weight/height curves and WHO Reference 2007 BMI-for-age (5–19 years), with vaccination milestone pins.
-- **TikaBot AI & Offline RAG Assistant**:
+- **TikaBot & Offline Retrieval Assistant**:
   - Offline bilingual BM25 retrieval over verified Bangladesh EPI & clinical vaccine data (`src/lib/ragEngine.ts`) with emergency symptom triage.
   - Optional server-proxied Gemini streaming & Live Voice Q&A via `/api/tikabot/*` and WebSocket `/ws/live-voice`.
-- **Verifiable Digital Vaccination Passport**:
-  - QR code certificates with both per-device HMAC (`TIKAPASS2`) and cross-device verifiable ECDSA P-256 signatures (`TIKAPASS3`), plus printable PDF/SVG export with Unicode Bangla text fallback.
+- **Biometric-Protected Digital Vaccination Passport**:
+  - QR code certificates with per-device HMAC (`TIKAPASS2`) and cross-device verifiable ECDSA P-256 signatures (`TIKAPASS3`), secured with WebAuthn passkeys or a 6-digit PIN vault lock, plus printable PDF/SVG export with Unicode Bangla text fallback.
+- **Offline Local Notifications & Web Push Alerts**:
+  - On-device Notification API scheduler with quiet-hours deferral and Service Worker dispatch (`sw.template.js`), alongside optional VAPID Web Push 48-hour reminders (`/api/push/*`).
 - **Interactive Cold-Chain 3D Explorer & Centres Map**:
   - Three.js WHO PQS cold-chain explorer (`ColdChainScene.ts`) and Bangladesh vaccination centre locator (`CentresMap.tsx` with Google Maps Platform integration).
-- **Web Push 48-Hour Alerts & Offline-First PWA**:
-  - Custom service worker (`sw.template.js`) with build-hashed precaching, update-waiting prompt, and VAPID-authenticated Web Push reminders (`web-push`).
+- **Offline-First PWA & Curated Themes**:
+  - Custom service worker (`sw.template.js`) caching the app shell, national EPI schedule (`epi-schedule.json`), and family profile state for offline dashboard access, paired with warm wooden Day Mode themes and dark mode.
 - **Multi-Backend Sync Architecture**:
   - **Local-first by default**: Zero-config browser `localStorage` with PBKDF2-SHA256 local accounts.
   - **Firebase Auth & Firestore**: Cross-device family profile sync secured with Firestore rules and tombstone-aware merges.
@@ -43,6 +46,12 @@ For environment variables (optional Firebase, Cloud SQL PostgreSQL, Gemini API k
 - `npm run lint` — TypeScript typecheck (`tsc --noEmit`)
 - `npm run eslint` — ESLint across codebase
 - `npm run test:run` — Run full Vitest suite
+
+## GitHub CI & Deployment
+
+Pushing to `main` automatically triggers:
+- **CI (`.github/workflows/ci.yml`)**: TypeScript check, ESLint, Firestore security rules lint, full Vitest runs in UTC and `Asia/Dhaka`, and production Vite build.
+- **GitHub Pages (`.github/workflows/deploy.yml`)**: Builds `dist/` with the repository base path and deploys to GitHub Pages.
 
 ## Documentation
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -13,6 +13,7 @@ import {
   Search,
   ShieldCheck,
   Snowflake,
+  Syringe,
   TriangleAlert,
   Users,
 } from 'lucide-react';
@@ -22,7 +23,7 @@ import { FamilyDashboard } from '../components/FamilyDashboard';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { allVaccinationCentres } from '../data/vaccinationCentres';
-import { allVaccines } from '../data/vaccines';
+import { allVaccines, schedule } from '../data/vaccines';
 import { useI18n } from '../i18n';
 import { openCommandPalette } from '../lib/commandPalette';
 import { localiseNumber } from '../lib/format';
@@ -104,6 +105,9 @@ export default function HomePage() {
   const { profiles, persistent, ready } = useProfiles();
   const isBangla = language === 'bn';
 
+  const [epiStageIdx, setEpiStageIdx] = useState(0);
+  const [panelView, setPanelView] = useState<'household' | 'explorer'>('household');
+
   const stats = useMemo(() => {
     const districts = new Set(allVaccinationCentres.map((centre) => centre.district));
     const divisions = new Set(allVaccinationCentres.map((centre) => centre.division));
@@ -130,22 +134,25 @@ export default function HomePage() {
     return { overdue, dueToday, completed };
   }, [profiles]);
 
+  const activeEpiStage = schedule[epiStageIdx] ?? schedule[0];
+  const showingExplorer = profiles.length === 0 || panelView === 'explorer';
+
   return (
     <>
       {/* --- Clinical Editorial Hero ---------------------------------------- */}
-      <section className="border-b border-neutral-200/80 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <div className="page-shell grid items-center gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+      <section className="bg-clinical-grid border-b border-[var(--tt-border)] bg-[var(--tt-card)]/35">
+        <div className="page-shell grid items-center gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <div>
             <p className={`eyebrow flex-wrap ${isBangla ? 'font-bangla' : ''}`}>
               <span>DGHS EPI · WHO GROWTH STANDARDS</span>
-              <span className="text-neutral-300 dark:text-neutral-700" aria-hidden="true">
+              <span className="opacity-45" aria-hidden="true">
                 ·
               </span>
               <span>{t('home.hero.eyebrowMeta')}</span>
             </p>
 
             <h1
-              className={`mt-4 text-3xl leading-[1.12] font-extrabold tracking-tight text-neutral-900 sm:text-5xl dark:text-white ${
+              className={`mt-4 max-w-2xl text-3xl leading-[1.1] font-extrabold tracking-tight text-balance text-[var(--tt-ink)] sm:text-5xl ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -153,7 +160,7 @@ export default function HomePage() {
             </h1>
 
             <p
-              className={`mt-5 max-w-2xl text-base leading-relaxed text-neutral-600 sm:text-lg dark:text-neutral-300 ${
+              className={`mt-5 max-w-2xl text-base leading-relaxed text-[var(--tt-ink-muted)] sm:text-lg ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -191,24 +198,24 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Clinical Family Command Telemetry Panel (flat hairline hierarchy) */}
-          <aside className="rounded-xl border border-neutral-200/90 bg-neutral-50/75 p-5 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900/70">
-            <div className="flex items-center justify-between gap-2 border-b border-neutral-200/80 pb-4 dark:border-neutral-800">
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
-                  {t('home.command.eyebrow')}
+          {/* Clinical Family Command & Interactive EPI Milestone Panel */}
+          <aside className="rounded-xl border border-[var(--tt-border)] bg-[var(--tt-card)] p-5 shadow-[var(--shadow-card)] sm:p-6">
+            <div className="flex items-start justify-between gap-2 border-b border-[var(--tt-border)] pb-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold tracking-wider text-[var(--tt-ink-muted)] uppercase">
+                  {showingExplorer ? t('home.explorer.eyebrow') : t('home.command.eyebrow')}
                 </p>
                 <h2
-                  className={`mt-1 text-base font-bold text-neutral-900 dark:text-white ${
+                  className={`mt-1 text-base font-bold text-[var(--tt-ink)] ${
                     isBangla ? 'font-bangla' : ''
                   }`}
                 >
-                  {profiles.length > 0 ? t('home.family.title') : t('home.command.readyTitle')}
+                  {showingExplorer ? t('home.explorer.title') : t('home.family.title')}
                 </h2>
               </div>
               <Link
                 to="/auth"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+                className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--tt-accent)] hover:underline"
               >
                 {user && backend !== 'local' ? (
                   <>
@@ -224,27 +231,58 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {profiles.length > 0 ? (
+            {profiles.length > 0 && (
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="segmented-group" role="group" aria-label={t('home.command.eyebrow')}>
+                  <button
+                    type="button"
+                    aria-pressed={panelView === 'household'}
+                    onClick={() => setPanelView('household')}
+                    className={`segmented-tab ${
+                      panelView === 'household'
+                        ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300'
+                        : ''
+                    }`}
+                  >
+                    {t('home.family.title')}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={panelView === 'explorer'}
+                    onClick={() => setPanelView('explorer')}
+                    className={`segmented-tab ${
+                      panelView === 'explorer'
+                        ? 'segmented-tab-active text-emerald-700 dark:text-emerald-300'
+                        : ''
+                    }`}
+                  >
+                    {t('home.explorer.eyebrow')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!showingExplorer ? (
               <div className="mt-4 space-y-4">
-                <dl className="grid grid-cols-3 divide-x divide-neutral-200/80 rounded-lg border border-neutral-200/80 bg-white py-3 dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-950/60">
+                <dl className="grid grid-cols-3 divide-x divide-[var(--tt-border)] rounded-lg border border-[var(--tt-border)] bg-[var(--tt-subtle)] py-3">
                   <div className="px-3">
-                    <dt className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    <dt className="text-[11px] font-medium text-[var(--tt-ink-muted)]">
                       {t('home.command.members')}
                     </dt>
-                    <dd className="mt-1 text-2xl font-bold tabular-nums text-neutral-900 dark:text-white">
+                    <dd className="mt-1 text-2xl font-bold tabular-nums text-[var(--tt-ink)]">
                       {localiseNumber(profiles.length, language)}
                     </dd>
                   </div>
                   <div className="px-3">
-                    <dt className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    <dt className="text-[11px] font-medium text-[var(--tt-ink-muted)]">
                       {t('home.command.completed')}
                     </dt>
-                    <dd className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    <dd className="mt-1 text-2xl font-bold tabular-nums text-[var(--tt-accent)]">
                       {localiseNumber(familyOverview.completed, language)}
                     </dd>
                   </div>
                   <div className="px-3">
-                    <dt className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    <dt className="text-[11px] font-medium text-[var(--tt-ink-muted)]">
                       {t('home.command.attention')}
                     </dt>
                     <dd
@@ -272,29 +310,88 @@ export default function HomePage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 space-y-4">
-                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-neutral-200/80 bg-neutral-200/80 dark:border-neutral-800 dark:bg-neutral-800">
-                  {stats.slice(0, 4).map(({ key, value }) => (
-                    <div key={key} className="bg-white p-3.5 dark:bg-neutral-950/70">
-                      <dd className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                        <AnimatedCounter end={value} duration={900} />
-                      </dd>
-                      <dt
-                        className={`mt-1 text-xs text-neutral-600 dark:text-neutral-300 ${
+              <div className="mt-4 space-y-3.5">
+                {/* Interactive EPI Stage Selector */}
+                <div
+                  role="group"
+                  aria-label={t('home.explorer.title')}
+                  className="grid grid-cols-3 gap-1 rounded-lg border border-[var(--tt-border)] bg-[var(--tt-subtle)] p-1"
+                >
+                  {schedule.map((stage, idx) => {
+                    const active = idx === epiStageIdx;
+                    return (
+                      <button
+                        key={stage.age.en}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setEpiStageIdx(idx)}
+                        className={`rounded-md px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                          active
+                            ? 'bg-[var(--tt-card)] text-[var(--tt-accent)] shadow-xs'
+                            : 'text-[var(--tt-ink-muted)] hover:text-[var(--tt-ink)]'
+                        } ${isBangla ? 'font-bangla' : ''}`}
+                      >
+                        {stage.age[language]}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Stage Vaccine Doses */}
+                {activeEpiStage && (
+                  <div className="rounded-lg border border-[var(--tt-border)] bg-[var(--tt-subtle)] p-3.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-[var(--tt-border)] pb-2">
+                      <span
+                        className={`text-xs font-bold text-[var(--tt-ink)] ${
                           isBangla ? 'font-bangla' : ''
                         }`}
                       >
-                        {t(key)}
-                      </dt>
+                        {activeEpiStage.age[language]}
+                      </span>
+                      <span className="font-mono text-[11px] font-semibold tabular-nums text-[var(--tt-accent)]">
+                        {t(
+                          'home.explorer.vaccinesDueCount',
+                          localiseNumber(activeEpiStage.vaccines.length, language),
+                        )}
+                      </span>
                     </div>
-                  ))}
-                </dl>
-                <div className="flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-300">
-                  <span className={isBangla ? 'font-bangla' : undefined}>
-                    {t('home.command.instantHint')}
-                  </span>
-                  <Link to="/readiness" className="btn-link shrink-0">
-                    {t('home.hero.readiness')}
+                    <ul className="mt-2.5 divide-y divide-[var(--tt-border)]">
+                      {activeEpiStage.vaccines.map((item) => (
+                        <li key={`${activeEpiStage.ageDays}-${item.name.en}`} className="py-1.5 first:pt-0 last:pb-0">
+                          <Link
+                            to={`/vaccines/${item.id}`}
+                            className="group flex items-center justify-between gap-2 text-xs font-semibold text-neutral-800 hover:text-emerald-700 dark:text-neutral-200 dark:hover:text-emerald-400"
+                          >
+                            <span className="inline-flex items-center gap-2 truncate">
+                              <Syringe
+                                className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                                aria-hidden="true"
+                              />
+                              <span className={`truncate ${isBangla ? 'font-bangla' : ''}`}>
+                                {item.name[language]}
+                              </span>
+                            </span>
+                            <ArrowRight
+                              className="h-3 w-3 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-700 dark:group-hover:text-emerald-400"
+                              aria-hidden="true"
+                            />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <Link to="/schedule" className="btn-link inline-flex items-center gap-1">
+                    <span>{t('home.explorer.openSchedule')}</span>
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                  </Link>
+                  <Link
+                    to="/tracker"
+                    className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+                  >
+                    {t('home.explorer.trackThisAge')}
                   </Link>
                 </div>
               </div>
@@ -303,18 +400,18 @@ export default function HomePage() {
             <button
               type="button"
               onClick={openCommandPalette}
-              className="mt-4 flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-left text-xs text-neutral-600 transition-colors hover:border-emerald-300 hover:text-emerald-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+              className="mt-4 flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--tt-border)] bg-[var(--tt-subtle)] px-3.5 py-2.5 text-left text-xs text-[var(--tt-ink-muted)] transition-colors hover:border-[var(--tt-accent)] hover:text-[var(--tt-ink)]"
             >
               <span className="inline-flex min-w-0 items-center gap-2">
                 <Search
-                  className="h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400"
+                  className="h-3.5 w-3.5 shrink-0 text-[var(--tt-accent)]"
                   aria-hidden="true"
                 />
                 <span className={`truncate ${isBangla ? 'font-bangla' : ''}`}>
                   {t('home.command.searchHint')}
                 </span>
               </span>
-              <kbd className="shrink-0 rounded border border-neutral-300 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+              <kbd className="shrink-0 rounded border border-[var(--tt-border-strong)] bg-[var(--tt-card)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--tt-ink-muted)]">
                 ⌘K
               </kbd>
             </button>
@@ -326,15 +423,15 @@ export default function HomePage() {
       <FamilyDashboard profiles={profiles} />
 
       {/* --- National Surveillance Stats Strip ------------------------------ */}
-      <section className="border-b border-neutral-200/80 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <dl className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-neutral-200/80 px-4 py-8 sm:grid-cols-3 sm:px-6 lg:grid-cols-5 lg:divide-x lg:px-8 dark:divide-neutral-800">
+      <section className="border-b border-[var(--tt-border)] bg-[var(--tt-chrome-solid)]">
+        <dl className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-[var(--tt-border)] px-4 py-8 sm:grid-cols-3 sm:px-6 lg:grid-cols-5 lg:divide-x lg:px-8">
           {stats.map(({ key, value }) => (
             <div key={key} className="px-4 py-2 text-center">
-              <dd className="text-2xl font-bold tabular-nums text-emerald-700 sm:text-3xl dark:text-emerald-400">
+              <dd className="text-2xl font-bold tabular-nums text-[var(--tt-accent)] sm:text-3xl">
                 <AnimatedCounter end={value} />
               </dd>
               <dt
-                className={`mt-1 text-xs text-neutral-500 dark:text-neutral-400 ${
+                className={`mt-1 text-xs text-[var(--tt-ink-muted)] ${
                   isBangla ? 'font-bangla' : ''
                 }`}
               >
@@ -371,16 +468,16 @@ export default function HomePage() {
             >
               {t('home.quick.coreGroup')}
             </p>
-            <div className="divide-y divide-neutral-200/80 overflow-hidden rounded-xl border border-neutral-200/90 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900/95">
+            <div className="divide-y divide-[var(--tt-border)] overflow-hidden rounded-xl border border-[var(--tt-border)] bg-[var(--tt-card)] shadow-[var(--shadow-card)]">
               {CORE_WORKFLOWS.map(({ to, icon: Icon, titleKey, bodyKey, metaKey }) => (
                 <Link
                   key={to}
                   to={to}
-                  className="group flex items-start justify-between gap-4 p-5 transition-colors hover:bg-neutral-50/90 dark:hover:bg-neutral-800/40"
+                  className="group flex items-start justify-between gap-4 p-5 transition-colors hover:bg-[var(--tt-subtle)]/55"
                 >
                   <div className="flex min-w-0 items-start gap-4">
                     <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/60 dark:text-emerald-300"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--tt-border)] bg-[var(--tt-accent-soft)] text-[var(--tt-accent-ink)]"
                       aria-hidden="true"
                     >
                       <Icon className="h-5 w-5" />
@@ -388,18 +485,18 @@ export default function HomePage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2">
                         <h3
-                          className={`text-base font-bold text-neutral-900 group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-400 ${
+                          className={`text-base font-bold text-[var(--tt-ink)] group-hover:text-[var(--tt-accent)] ${
                             isBangla ? 'font-bangla' : ''
                           }`}
                         >
                           {t(titleKey)}
                         </h3>
-                        <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                        <span className="text-[11px] font-medium text-[var(--tt-ink-muted)]">
                           · {t(metaKey)}
                         </span>
                       </div>
                       <p
-                        className={`mt-1 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400 ${
+                        className={`mt-1 text-sm leading-relaxed text-[var(--tt-ink-muted)] ${
                           isBangla ? 'font-bangla' : ''
                         }`}
                       >
@@ -408,7 +505,7 @@ export default function HomePage() {
                     </div>
                   </div>
                   <ArrowRight
-                    className="mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-700 dark:group-hover:text-emerald-400"
+                    className="mt-1 h-4 w-4 shrink-0 text-[var(--tt-ink-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--tt-accent)]"
                     aria-hidden="true"
                   />
                 </Link>
@@ -419,7 +516,7 @@ export default function HomePage() {
           {/* Decision Support & Diagnostics */}
           <div className="lg:col-span-5">
             <p
-              className={`mb-3 text-xs font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${
+              className={`mb-3 text-xs font-semibold tracking-wider text-[var(--tt-ink-muted)] uppercase ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -429,7 +526,7 @@ export default function HomePage() {
               {DIAGNOSTIC_TOOLS.map(({ to, icon: Icon, titleKey, bodyKey, metaKey }) => (
                 <Link key={to} to={to} className="card-hover flex items-start gap-3.5 p-4">
                   <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--tt-subtle)] text-[var(--tt-ink)]"
                     aria-hidden="true"
                   >
                     <Icon className="h-4 w-4" />
@@ -437,18 +534,18 @@ export default function HomePage() {
                   <div className="min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <h3
-                        className={`text-sm font-bold text-neutral-900 dark:text-white ${
+                        className={`text-sm font-bold text-[var(--tt-ink)] ${
                           isBangla ? 'font-bangla' : ''
                         }`}
                       >
                         {t(titleKey)}
                       </h3>
-                      <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                      <span className="text-[11px] font-medium text-[var(--tt-ink-muted)]">
                         {t(metaKey)}
                       </span>
                     </div>
                     <p
-                      className={`mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400 ${
+                      className={`mt-1 text-xs leading-relaxed text-[var(--tt-ink-muted)] ${
                         isBangla ? 'font-bangla' : ''
                       }`}
                     >

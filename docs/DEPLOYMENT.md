@@ -9,7 +9,7 @@ Push reminders (`/api/push/*`) activate automatically when configured.
 ## 1. Build & Run
 
 ```bash
-npm ci                 # reproducible install from package-lock.json
+npm install            # install dependencies (or npm ci when using a lockfile)
 npm run build          # vite build  →  dist/
 npm start              # node server.ts (Node 22+ Express + dist/)
 ```
@@ -98,8 +98,8 @@ it. To deploy under `https://<user>.github.io/<repo>/`:
        steps:
          - uses: actions/checkout@v4
          - uses: actions/setup-node@v4
-           with: { node-version: 20, cache: npm }
-         - run: npm ci
+           with: { node-version: 22 }
+         - run: npm install --legacy-peer-deps
          - run: VITE_BASE=/${{ github.event.repository.name }}/ npm run build
          - uses: actions/configure-pages@v5
          - uses: actions/upload-pages-artifact@v3

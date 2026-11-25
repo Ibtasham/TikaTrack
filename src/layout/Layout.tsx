@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { AppStatus } from '../components/AppStatus';
 import { CommandPalette } from '../components/CommandPalette';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { LocalNotificationAgent } from '../components/LocalNotificationAgent';
 import { MobileBottomNav } from '../components/MobileBottomNav';
 import { WelcomeDialog } from '../components/WelcomeDialog';
 import { useI18n } from '../i18n';
@@ -21,7 +22,7 @@ export function Layout() {
   const { t } = useI18n();
 
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50 dark:bg-surface-dark">
+    <div className="flex min-h-screen flex-col bg-transparent text-[var(--tt-ink)]">
       <ScrollToTop />
 
       <a className="sr-only-focusable" href="#main-content">
@@ -32,6 +33,7 @@ export function Layout() {
 
       <main id="main-content" className="flex-1">
         <AppStatus />
+        <LocalNotificationAgent />
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>

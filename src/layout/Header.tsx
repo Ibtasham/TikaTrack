@@ -7,12 +7,13 @@ import {
   Calendar,
   ChevronDown,
   ClipboardList,
+  Cloud,
   Compass,
   Globe,
+  HardDrive,
   IdCard,
   MapPin,
   Menu,
-  Monitor,
   Moon,
   Search,
   Snowflake,
@@ -26,8 +27,9 @@ import {
 import { InstallButton } from '../components/InstallButton';
 import Logo from '../components/Logo';
 import { TextSizeButton } from '../components/TextSizeButton';
+import { ThemePicker } from '../components/ThemePicker';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme, type ThemePreference } from '../contexts/ThemeContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useFocusTrap } from '../hooks';
 import { useI18n } from '../i18n';
 import { openCommandPalette } from '../lib/commandPalette';
@@ -56,24 +58,18 @@ const SECONDARY_NAV: NavItem[] = [
   { to: '/passport', labelKey: 'nav.passport', icon: IdCard },
 ];
 
-const THEME_OPTIONS: Array<{ value: ThemePreference; icon: typeof Sun; labelKey: string }> = [
-  { value: 'light', icon: Sun, labelKey: 'common.theme.light' },
-  { value: 'dark', icon: Moon, labelKey: 'common.theme.dark' },
-  { value: 'system', icon: Monitor, labelKey: 'common.theme.system' },
-];
-
 function navClass({ isActive }: { isActive: boolean }): string {
   return [
-    'flex items-center gap-2 whitespace-nowrap shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+    'relative flex items-center gap-2 whitespace-nowrap shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
     isActive
-      ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
-      : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800/80 dark:hover:text-white',
+      ? 'bg-[var(--tt-accent-soft)] text-[var(--tt-accent-ink)] font-semibold'
+      : 'text-[var(--tt-ink-muted)] hover:bg-[var(--tt-subtle)] hover:text-[var(--tt-ink)]',
   ].join(' ');
 }
 
 export function Header() {
   const { t, language, toggleLanguage } = useI18n();
-  const { preference, setTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const { user, backend } = useAuth();
   const { pathname } = useLocation();
 
@@ -100,7 +96,7 @@ export function Header() {
   const moreActive = SECONDARY_NAV.some((item) => pathname.startsWith(item.to));
 
   return (
-    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/90 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-950/90">
+    <header className="sticky top-0 z-50 border-b border-[var(--tt-border)] bg-[var(--tt-chrome)] backdrop-blur-md">
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-16 lg:px-8">
         <NavLink
           to="/"
@@ -109,7 +105,7 @@ export function Header() {
           title={t('app.tagline')}
         >
           <Logo size="sm" showText={false} />
-          <span className="hidden text-base font-bold tracking-tight text-neutral-900 sm:inline dark:text-white">
+          <span className="hidden text-base font-bold tracking-tight text-[var(--tt-ink)] sm:inline">
             TikaTrack
           </span>
         </NavLink>
@@ -140,7 +136,7 @@ export function Header() {
                 />
               </button>
               {moreOpen && (
-                <div className="animate-scale-in absolute right-0 mt-2 w-56 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="animate-scale-in absolute right-0 mt-2 w-56 rounded-xl border border-[var(--tt-border)] bg-[var(--tt-card)] p-1.5 shadow-lg">
                   {SECONDARY_NAV.map(({ to, labelKey, icon: Icon }) => (
                     <NavLink key={to} to={to} className={navClass}>
                       <Icon className="h-4 w-4 opacity-80" aria-hidden="true" />
@@ -157,13 +153,13 @@ export function Header() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-white"
+            className="inline-flex min-h-[36px] min-w-[36px] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--tt-border)] bg-[var(--tt-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--tt-ink-muted)] transition-colors hover:border-[var(--tt-border-strong)] hover:text-[var(--tt-ink)]"
             aria-label={t('nav.quickSearch')}
             title={`${t('nav.quickSearch')} (${t('cmd.shortcutHint')})`}
           >
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="hidden xl:inline">{t('cmd.triggerLabel')}</span>
-            <kbd className="hidden rounded border border-neutral-300 bg-white px-1 py-0.5 font-mono text-[10px] text-neutral-500 xl:inline dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400">
+            <kbd className="hidden rounded border border-[var(--tt-border-strong)] bg-[var(--tt-card)] px-1 py-0.5 font-mono text-[10px] text-[var(--tt-ink-muted)] xl:inline">
               ⌘K
             </kbd>
           </button>
@@ -176,7 +172,7 @@ export function Header() {
           <button
             type="button"
             onClick={toggleLanguage}
-            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+            className="inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--tt-ink-muted)] transition-colors hover:bg-[var(--tt-subtle)] hover:text-[var(--tt-ink)]"
             aria-label={t('common.label.language')}
             title={`${t('common.label.language')}: ${language === 'en' ? 'English' : 'বাংলা'}`}
           >
@@ -184,37 +180,16 @@ export function Header() {
             <span className="font-bangla">{isBangla ? 'EN' : 'বাং'}</span>
           </button>
 
-          {/* Theme */}
-          <div
-            className="hidden items-center rounded-lg border border-neutral-200 bg-neutral-50 p-0.5 sm:flex dark:border-neutral-800 dark:bg-neutral-900"
-            role="group"
-            aria-label={t('common.label.theme')}
-          >
-            {THEME_OPTIONS.map(({ value, icon: Icon, labelKey }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTheme(value)}
-                aria-pressed={preference === value}
-                title={t(labelKey)}
-                aria-label={t(labelKey)}
-                className={`rounded-md p-1.5 transition-colors ${
-                  preference === value
-                    ? 'bg-white text-emerald-700 shadow-xs dark:bg-neutral-800 dark:text-emerald-300'
-                    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            ))}
-          </div>
+          {/* Theme palette & mode */}
+          <ThemePicker />
           <button
             type="button"
-            onClick={() => setTheme(preference === 'dark' ? 'light' : 'dark')}
-            className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100 sm:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
+            onClick={toggleTheme}
+            className="hidden min-h-[36px] min-w-[36px] cursor-pointer items-center justify-center rounded-lg text-[var(--tt-ink-muted)] transition-colors hover:bg-[var(--tt-subtle)] hover:text-[var(--tt-ink)] sm:inline-flex"
             aria-label={t('common.theme.toggle')}
+            title={theme === 'dark' ? t('common.theme.light') : t('common.theme.dark')}
           >
-            {preference === 'dark' ? (
+            {theme === 'dark' ? (
               <Sun className="h-4 w-4" aria-hidden="true" />
             ) : (
               <Moon className="h-4 w-4" aria-hidden="true" />
@@ -238,7 +213,7 @@ export function Header() {
           <button
             type="button"
             onClick={() => setMobileOpen((open) => !open)}
-            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-neutral-600 hover:bg-neutral-100 lg:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center rounded-lg text-[var(--tt-ink-muted)] hover:bg-[var(--tt-subtle)] lg:hidden"
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
             aria-label={mobileOpen ? t('common.a11y.closeMenu') : t('common.a11y.openMenu')}
@@ -257,7 +232,7 @@ export function Header() {
           id="mobile-navigation"
           ref={mobileRef}
           aria-label={t('common.a11y.mainNavigation')}
-          className="animate-slide-up border-t border-neutral-200 bg-white px-4 py-3 lg:hidden dark:border-neutral-800 dark:bg-neutral-950"
+          className="animate-slide-up border-t border-[var(--tt-border)] bg-[var(--tt-chrome-solid)] px-4 py-3 lg:hidden"
         >
           <ul className="grid gap-1 sm:grid-cols-2">
             {[...PRIMARY_NAV, ...SECONDARY_NAV].map(({ to, labelKey, icon: Icon }) => (
@@ -269,12 +244,15 @@ export function Header() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 flex items-center gap-2 border-t border-neutral-100 pt-3 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-            <span
-              className={`h-2 w-2 rounded-full ${backend !== 'local' ? 'bg-emerald-500' : 'bg-neutral-400'}`}
-              aria-hidden="true"
-            />
-            {backend !== 'local' ? t('common.data.cloudSync') : t('common.data.localOnly')}
+          <p className="mt-3 flex items-center gap-2 border-t border-[var(--tt-border)] pt-3 text-xs font-medium text-[var(--tt-ink-muted)]">
+            {backend !== 'local' ? (
+              <Cloud className="h-3.5 w-3.5 text-[var(--tt-accent)]" aria-hidden="true" />
+            ) : (
+              <HardDrive className="h-3.5 w-3.5 text-[var(--tt-ink-muted)]" aria-hidden="true" />
+            )}
+            <span>
+              {backend !== 'local' ? t('common.data.cloudSync') : t('common.data.localOnly')}
+            </span>
           </p>
         </nav>
       )}

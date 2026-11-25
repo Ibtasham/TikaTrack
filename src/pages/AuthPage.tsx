@@ -7,6 +7,7 @@ import {
   Database,
   Eye,
   EyeOff,
+  Fingerprint,
   HardDrive,
   KeyRound,
   LogOut,
@@ -22,8 +23,10 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
+import { useBiometricVaultState } from '../hooks';
 import { useI18n } from '../i18n';
 import type { FamilyRole } from '../types/auth';
+import { type BiometricErrorCode, verifyBiometricUnlock } from '../lib/biometricLock';
 import { assessPasswordStrength, MIN_PASSWORD_LENGTH } from '../lib/localAuth';
 
 type Mode = 'login' | 'signup' | 'reset';
@@ -76,6 +79,9 @@ export default function AuthPage() {
   const [familyName, setFamilyName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [familyBusy, setFamilyBusy] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+
+  const { snapshot: vaultSnapshot } = useBiometricVaultState();
 
   const strength = useMemo(() => assessPasswordStrength(password), [password]);
   const strengthTone =
@@ -120,6 +126,47 @@ export default function AuthPage() {
     }
     toast.success(t('auth.google.success'));
     navigate('/tracker');
+  };
+
+  const describeBiometricError = useCallback(
+    (code: BiometricErrorCode, cooldownSeconds?: number): string => {
+      switch (code) {
+        case 'cancelled':
+          return t('passport.biometric.error.cancelled');
+        case 'iframe-blocked':
+          return t('passport.biometric.error.iframeBlocked');
+        case 'unsupported':
+          return t('passport.biometric.error.unsupported');
+        case 'insecure-context':
+          return t('passport.biometric.error.insecure');
+        case 'verification-failed':
+          return t('passport.biometric.error.verificationFailed');
+        case 'invalid-pin':
+          return t('passport.biometric.error.invalidPin');
+        case 'pin-cooldown':
+          return t('passport.biometric.error.cooldown', cooldownSeconds ?? 30);
+        default:
+          return t('passport.biometric.error.generic');
+      }
+    },
+    [t],
+  );
+
+  const handleBiometricPassportUnlock = async () => {
+    setFormError(null);
+    setBiometricBusy(true);
+    const result = await verifyBiometricUnlock();
+    setBiometricBusy(false);
+    if (!result.ok) {
+      const message = describeBiometricError(result.errorCode, result.cooldownSeconds);
+      setFormError(message);
+      if (user) {
+        toast.error(message);
+      }
+      return;
+    }
+    toast.success(t('passport.biometric.unlockedToast'));
+    navigate('/passport');
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -284,6 +331,51 @@ export default function AuthPage() {
               </span>
             </button>
           </div>
+
+          {vaultSnapshot.enrolled && (
+            <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/70">
+              <div className="flex items-start gap-2.5">
+                <Fingerprint
+                  className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`text-sm font-semibold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t('auth.biometric.title')}
+                  </p>
+                  <p
+                    className={`mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t(
+                      'auth.biometric.enrolledBody',
+                      vaultSnapshot.config?.deviceLabel ?? 'this device',
+                    )}
+                  </p>
+                  {vaultSnapshot.config?.mode === 'webauthn' ? (
+                    <button
+                      type="button"
+                      disabled={biometricBusy}
+                      onClick={() => void handleBiometricPassportUnlock()}
+                      className="btn-secondary btn-sm mt-3 w-full whitespace-nowrap shrink-0"
+                    >
+                      <Fingerprint className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{t('auth.biometric.unlockPassport')}</span>
+                    </button>
+                  ) : (
+                    <Link
+                      to="/passport"
+                      className="btn-secondary btn-sm mt-3 w-full whitespace-nowrap shrink-0"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{t('auth.biometric.unlockPassport')}</span>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="my-5 flex items-center gap-3 text-xs text-neutral-400 dark:text-neutral-500">
             <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
@@ -472,7 +564,7 @@ export default function AuthPage() {
       <header className="border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="eyebrow">
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-          {t('nav.account')}
+          {t('nav.auth')}
         </p>
         <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
           {t('auth.login.title')}
@@ -553,6 +645,72 @@ export default function AuthPage() {
           )}
         </div>
       </div>
+
+      {/* Mobile Biometric Passport shortcut */}
+      <section className="card-padded mt-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Fingerprint
+              className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2
+                  className={`font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+                >
+                  {t('auth.biometric.title')}
+                </h2>
+                {vaultSnapshot.enrolled ? (
+                  vaultSnapshot.unlocked ? (
+                    <span className="badge-done">{t('passport.biometric.status.protected')}</span>
+                  ) : (
+                    <span className="badge-due">{t('passport.biometric.status.locked')}</span>
+                  )
+                ) : (
+                  <span className="badge-neutral">{t('passport.biometric.status.off')}</span>
+                )}
+              </div>
+              <p
+                className={`mt-1 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+              >
+                {vaultSnapshot.enrolled
+                  ? t(
+                      'auth.biometric.enrolledBody',
+                      vaultSnapshot.config?.deviceLabel ?? 'this device',
+                    )
+                  : t('auth.biometric.readyBody')}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {vaultSnapshot.enrolled && !vaultSnapshot.unlocked && vaultSnapshot.config?.mode === 'webauthn' ? (
+              <button
+                type="button"
+                disabled={biometricBusy}
+                onClick={() => void handleBiometricPassportUnlock()}
+                className="btn-primary btn-sm whitespace-nowrap shrink-0"
+              >
+                <Fingerprint className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{t('auth.biometric.unlockPassport')}</span>
+              </button>
+            ) : (
+              <Link
+                to="/passport"
+                className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+              >
+                <Fingerprint className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>
+                  {vaultSnapshot.enrolled
+                    ? t('auth.biometric.managePassport')
+                    : t('auth.biometric.setupPassport')}
+                </span>
+              </Link>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Password panel (local or Supabase accounts only) */}
       {!isFirebase && (

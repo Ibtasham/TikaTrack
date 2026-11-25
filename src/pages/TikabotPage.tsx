@@ -66,6 +66,13 @@ interface PersistedBotMessage extends ChatMessage {
   modelUsed?: string;
 }
 
+interface GeminiApiFailure {
+  code: string;
+  message: string;
+  quotaExceeded: boolean;
+  failedQuestion: string;
+}
+
 function isStoredMessages(value: unknown): value is ChatMessage[] {
   if (!Array.isArray(value)) return false;
   return value.every(
@@ -97,6 +104,7 @@ export default function TikabotPage() {
   );
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [apiError, setApiError] = useState<GeminiApiFailure | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [savedNoteIds, setSavedNoteIds] = useState<Record<string, boolean>>({});
@@ -174,26 +182,36 @@ export default function TikabotPage() {
   );
 
   const ask = useCallback(
-    async (question: string) => {
+    async (
+      question: string,
+      options: { forceOffline?: boolean; skipUserEcho?: boolean } = {},
+    ) => {
       const text = question.trim();
       if (!text || thinking) return;
 
-      const userMessage: ChatMessage = {
-        id: createMessageId(),
-        role: 'user',
-        text,
-        createdAt: Date.now(),
-      };
       const priorHistory = messages.slice(-12).map((m) => ({
         role: m.role === 'user' ? ('user' as const) : ('model' as const),
         text: m.text,
       }));
 
-      setMessages((previous) => [...previous, userMessage].slice(-MAX_HISTORY));
-      setDraft('');
+      setApiError(null);
+      if (!options.skipUserEcho) {
+        const userMessage: ChatMessage = {
+          id: createMessageId(),
+          role: 'user',
+          text,
+          createdAt: Date.now(),
+        };
+        setMessages((previous) => [...previous, userMessage].slice(-MAX_HISTORY));
+        setDraft('');
+      }
       setThinking(true);
 
-      const useOfflineOnly = engine === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false);
+      const useOfflineOnly =
+        options.forceOffline ||
+        engine === 'offline' ||
+        import.meta.env?.MODE === 'test' ||
+        (typeof navigator !== 'undefined' && navigator.onLine === false);
 
       if (useOfflineOnly) {
         typingTimer.current = window.setTimeout(() => {
@@ -224,18 +242,49 @@ export default function TikabotPage() {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`API error (${response.status})`);
-        }
-
-        const data = (await response.json()) as {
+        const data = (await response.json().catch(() => ({}))) as {
           text?: string;
           modelUsed?: string;
           groundingSources?: GroundingSource[];
+          error?: string;
+          code?: string;
+          quotaExceeded?: boolean;
         };
 
+        if (!response.ok) {
+          const hasApiErrorPayload =
+            typeof data.code === 'string' || typeof data.error === 'string';
+          if (response.status === 404 && !hasApiErrorPayload) {
+            // Static host (e.g., GitHub Pages) with no backend /api server.
+            const fallbackMsg = runOfflineRag(text);
+            setMessages((previous) => [...previous, fallbackMsg].slice(-MAX_HISTORY));
+            toast.info(t('tikabot.fallbackUsed'));
+            return;
+          }
+
+          const quotaExceeded = response.status === 429 || Boolean(data.quotaExceeded);
+          const failure: GeminiApiFailure = {
+            code: data.code || (quotaExceeded ? 'RESOURCE_EXHAUSTED' : `HTTP_${response.status}`),
+            message: data.error || `API error (${response.status})`,
+            quotaExceeded,
+            failedQuestion: text,
+          };
+          setApiError(failure);
+          toast.error(
+            quotaExceeded ? t('tikabot.apiError.quotaTitle') : failure.message,
+          );
+          return;
+        }
+
         if (!data.text?.trim()) {
-          throw new Error('Empty response');
+          setApiError({
+            code: 'EMPTY_RESPONSE',
+            message: t('tikabot.apiError.title'),
+            quotaExceeded: false,
+            failedQuestion: text,
+          });
+          toast.error(t('tikabot.apiError.title'));
+          return;
         }
 
         const botMessage: PersistedBotMessage = {
@@ -250,11 +299,23 @@ export default function TikabotPage() {
         };
 
         setMessages((previous) => [...previous, botMessage].slice(-MAX_HISTORY));
-      } catch {
-        // Seamless offline RAG fallback so guidance is never interrupted.
-        const fallbackMsg = runOfflineRag(text);
-        setMessages((previous) => [...previous, fallbackMsg].slice(-MAX_HISTORY));
-        toast.info(t('tikabot.fallbackUsed'));
+      } catch (err) {
+        const isBrowserOffline =
+          typeof navigator !== 'undefined' && navigator.onLine === false;
+        if (isBrowserOffline) {
+          const fallbackMsg = runOfflineRag(text);
+          setMessages((previous) => [...previous, fallbackMsg].slice(-MAX_HISTORY));
+          toast.info(t('tikabot.fallbackUsed'));
+        } else {
+          const msg = err instanceof Error ? err.message : t('tikabot.apiError.title');
+          setApiError({
+            code: 'NETWORK_ERROR',
+            message: msg,
+            quotaExceeded: false,
+            failedQuestion: text,
+          });
+          toast.error(msg);
+        }
       } finally {
         setThinking(false);
         inputRef.current?.focus();
@@ -285,6 +346,7 @@ export default function TikabotPage() {
   const handleClear = () => {
     setMessages([]);
     setDraft('');
+    setApiError(null);
   };
 
   const handleCopyAnswer = async (id: string, text: string, personalised?: string) => {
@@ -321,9 +383,13 @@ export default function TikabotPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, language }),
       });
-      if (!res.ok) throw new Error('TTS request failed');
-      const data = (await res.json()) as { audioBase64?: string; mimeType?: string };
-      if (!data.audioBase64) throw new Error('No audio');
+      const data = (await res.json().catch(() => ({}))) as {
+        audioBase64?: string;
+        mimeType?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || t('tikabot.ttsError'));
+      if (!data.audioBase64) throw new Error(t('tikabot.ttsError'));
 
       const audio = new Audio(`data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`);
       audioRef.current = audio;
@@ -336,9 +402,9 @@ export default function TikabotPage() {
         audioRef.current = null;
       };
       await audio.play();
-    } catch {
+    } catch (err) {
       setSpeakingId(null);
-      toast.error(t('tikabot.ttsError'));
+      toast.error(err instanceof Error && err.message ? err.message : t('tikabot.ttsError'));
     }
   };
 
@@ -767,6 +833,51 @@ export default function TikabotPage() {
                     <span className={isBangla ? 'font-bangla' : undefined}>
                       {t('tikabot.thinking')}
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {apiError && !thinking && (
+                <div
+                  role="alert"
+                  className="ml-12 rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                >
+                  <p className={`flex items-center gap-1.5 font-bold ${isBangla ? 'font-bangla' : ''}`}>
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                    {apiError.quotaExceeded ? t('tikabot.apiError.quotaTitle') : t('tikabot.apiError.title')}
+                  </p>
+                  <p className={`mt-1 leading-relaxed text-amber-900/90 dark:text-amber-200/90 ${isBangla ? 'font-bangla' : ''}`}>
+                    {apiError.quotaExceeded ? t('tikabot.apiError.quotaHint') : apiError.message}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={() =>
+                        void ask(apiError.failedQuestion, { skipUserEcho: true })
+                      }
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className={isBangla ? 'font-bangla' : undefined}>
+                        {t('tikabot.apiError.retry')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      onClick={() => {
+                        setEngine('offline');
+                        void ask(apiError.failedQuestion, {
+                          forceOffline: true,
+                          skipUserEcho: true,
+                        });
+                      }}
+                    >
+                      <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className={isBangla ? 'font-bangla' : undefined}>
+                        {t('tikabot.apiError.useOffline')}
+                      </span>
+                    </button>
                   </div>
                 </div>
               )}

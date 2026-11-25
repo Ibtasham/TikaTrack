@@ -20,6 +20,8 @@ import { getOrCreateUser } from './src/db/users.ts';
 import { bridgeFor } from './src/data/evidence/bridge.ts';
 import { conflictsFor } from './src/data/evidence/conflicts.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
+import { buildEpiScheduleSnapshot } from './src/lib/epiScheduleSnapshot.ts';
+import { classifyGeminiError, withExponentialBackoff } from './src/lib/geminiErrors.ts';
 import { retrieve } from './src/lib/ragEngine.ts';
 import { extractClientIp, SlidingWindowRateLimiter } from './src/lib/rateLimit.ts';
 import { requireAuth, type AuthRequest } from './src/middleware/auth.ts';
@@ -55,7 +57,7 @@ function getAiClient(): GoogleGenAI {
     apiKey,
     httpOptions: {
       headers: {
-        'User-Agent': 'aistudio-build',
+        'User-Agent': 'tikatrack-server',
       },
     },
   });
@@ -215,6 +217,11 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  app.get('/api/epi-schedule', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json(buildEpiScheduleSnapshot());
+  });
+
   // -------------------------------------------------------------------------
   // Gemini Multi-Turn Chat + Search Grounding + Thinking Mode
   // -------------------------------------------------------------------------
@@ -247,7 +254,7 @@ async function startServer() {
       const { block: kbBlock, docSources } = buildVerifiedKbBlock(trimmedMessage, resolvedLang);
 
       const ai = getAiClient();
-      const model = mode === 'fast' ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen';
+      const requestedModel = mode === 'fast' ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen';
 
       const chatHistory = (Array.isArray(history) ? history : [])
         .slice(-16)
@@ -257,30 +264,56 @@ async function startServer() {
           parts: [{ text: turn.text.slice(0, 4000) }],
         }));
 
-      const config: {
-        systemInstruction: string;
-        thinkingConfig?: { thinkingLevel: ThinkingLevel };
-        tools?: Array<{ googleSearch: Record<string, never> }>;
-      } = {
-        systemInstruction: buildSystemInstruction(resolvedLang, profileContext, kbBlock),
+      const systemInstruction = buildSystemInstruction(resolvedLang, profileContext, kbBlock);
+
+      const sendWithModel = async (targetModel: string, enableGrounding: boolean) => {
+        const config: {
+          systemInstruction: string;
+          thinkingConfig?: { thinkingLevel: ThinkingLevel };
+          tools?: Array<{ googleSearch: Record<string, never> }>;
+        } = {
+          systemInstruction,
+        };
+
+        if (targetModel === 'gemini-4-hydrogen') {
+          config.thinkingConfig = {
+            thinkingLevel: mode === 'deep' ? ThinkingLevel.XHIGH : ThinkingLevel.MEDIUM,
+          };
+          if (enableGrounding) {
+            config.tools = [{ googleSearch: {} }];
+          }
+        }
+
+        const chat = ai.chats.create({
+          model: targetModel,
+          history: chatHistory,
+          config,
+        });
+
+        return withExponentialBackoff(
+          () => chat.sendMessage({ message: trimmedMessage }),
+          { maxRetries: 1, baseDelayMs: 350 },
+        );
       };
 
-      if (model === 'gemini-4-hydrogen') {
-        config.thinkingConfig = {
-          thinkingLevel: mode === 'deep' ? ThinkingLevel.XHIGH : ThinkingLevel.MEDIUM,
-        };
-        if (useSearchGrounding) {
-          config.tools = [{ googleSearch: {} }];
+      let modelUsed = requestedModel;
+      let response;
+      try {
+        response = await sendWithModel(requestedModel, Boolean(useSearchGrounding));
+      } catch (primaryError) {
+        const primaryClassified = classifyGeminiError(primaryError);
+        const canFallbackToLite =
+          requestedModel !== 'gemini-3.1-flash-lite' &&
+          (primaryClassified.retryable || primaryClassified.code === 'NOT_FOUND');
+
+        if (!canFallbackToLite) {
+          throw primaryError;
         }
+
+        modelUsed = 'gemini-3.1-flash-lite';
+        response = await sendWithModel('gemini-3.1-flash-lite', false);
       }
 
-      const chat = ai.chats.create({
-        model,
-        history: chatHistory,
-        config,
-      });
-
-      const response = await chat.sendMessage({ message: trimmedMessage });
       const text = response.text ?? '';
 
       const rawChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
@@ -303,20 +336,28 @@ async function startServer() {
 
       const uid = await tryVerifyOptionalUid(req.headers.authorization);
       if (uid) {
-        logStudioSession(uid, mode, trimmedMessage, text, model).catch(() => {
+        logStudioSession(uid, mode, trimmedMessage, text, modelUsed).catch(() => {
           /* non-blocking history log */
         });
       }
 
       res.json({
         text,
-        modelUsed: model,
+        modelUsed,
         groundingSources,
       });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to reach Gemini assistant.';
-      console.error('/api/ai/chat error:', error);
-      res.status(500).json({ error: msg });
+      const classified = classifyGeminiError(error);
+      if (classified.httpStatus >= 500 && classified.httpStatus !== 503) {
+        console.error('/api/ai/chat error:', classified.message);
+      } else {
+        console.warn(`/api/ai/chat (${classified.code} ${classified.httpStatus}):`, classified.message);
+      }
+      res.status(classified.httpStatus).json({
+        error: classified.message,
+        code: classified.code,
+        quotaExceeded: classified.quotaExceeded,
+      });
     }
   });
 
@@ -334,33 +375,65 @@ async function startServer() {
 
       const ai = getAiClient();
       const clipped = text.trim().slice(0, 1200);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: clipped,
-                speechMetadata: {
-                  style:
-                    language === 'bn'
-                      ? 'Calm, clear pediatric health advisor speaking Bengali clearly'
-                      : 'Calm, warm pediatric health advisor speaking clearly',
+      const speechStyle =
+        language === 'bn'
+          ? 'Calm, clear pediatric health advisor speaking Bengali clearly'
+          : 'Calm, warm pediatric health advisor speaking clearly';
+
+      const synthesizeWithMetadata = () =>
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: clipped,
+                  speechMetadata: {
+                    style: speechStyle,
+                  },
                 },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
               },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
           },
-        },
-      });
+        });
+
+      const synthesizeBasic = () =>
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: `${speechStyle}: ${clipped}` }],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+          },
+        });
+
+      let response;
+      try {
+        response = await withExponentialBackoff(synthesizeWithMetadata, {
+          maxRetries: 1,
+          baseDelayMs: 350,
+        });
+      } catch (primaryErr) {
+        const primaryClassified = classifyGeminiError(primaryErr);
+        if (primaryClassified.code === 'INVALID_ARGUMENT') {
+          response = await synthesizeBasic();
+        } else {
+          throw primaryErr;
+        }
+      }
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (!base64Audio) {
@@ -370,15 +443,35 @@ async function startServer() {
 
       res.json({ audioBase64: base64Audio, mimeType: 'audio/wav' });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Speech synthesis failed.';
-      console.error('/api/ai/tts error:', error);
-      res.status(500).json({ error: msg });
+      const classified = classifyGeminiError(error);
+      if (classified.httpStatus >= 500 && classified.httpStatus !== 503) {
+        console.error('/api/ai/tts error:', classified.message);
+      } else {
+        console.warn(`/api/ai/tts (${classified.code} ${classified.httpStatus}):`, classified.message);
+      }
+      res.status(classified.httpStatus).json({
+        error: classified.message,
+        code: classified.code,
+        quotaExceeded: classified.quotaExceeded,
+      });
     }
   });
 
   // -------------------------------------------------------------------------
   // Cloud SQL Authenticated Family Sync Endpoints (Firebase ID Token Protected)
   // -------------------------------------------------------------------------
+  app.get('/api/family/profiles', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const uid = req.user!.uid;
+      const profiles = await listProfilesByUser(uid);
+      res.setHeader('Cache-Control', 'private, max-age=0');
+      res.json({ profiles });
+    } catch (error) {
+      console.error('GET /api/family/profiles error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load profiles.' });
+    }
+  });
+
   app.post('/api/family/sync-session', requireAuth, async (req: AuthRequest, res) => {
     try {
       const uid = req.user!.uid;
@@ -867,11 +960,12 @@ async function startServer() {
           }
         }
       } catch (error) {
-        console.error('/api/live setup error:', error);
+        const classified = classifyGeminiError(error);
+        console.warn(`/api/live (${classified.code} ${classified.httpStatus}):`, classified.message);
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(
             JSON.stringify({
-              error: error instanceof Error ? error.message : 'Could not connect live voice session.',
+              error: classified.message,
             }),
           );
           clientWs.close();

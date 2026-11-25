@@ -7,13 +7,20 @@
  * generated one.
  *
  * Strategy
- *   install  → precache the app shell (hashed assets, index.html, icons) and wait
- *              so open forms aren't interrupted until the user accepts the update
- *   activate → delete caches left behind by previous builds, then `clients.claim()`
+ *   install  → precache the app shell (hashed assets, index.html, icons,
+ *              epi-schedule.json) and wait so open forms aren't interrupted until
+ *              the user accepts the update
+ *   activate → delete stale build caches from previous builds while preserving
+ *              the persistent `tikatrack-data-v1` offline data cache, then
+ *              `clients.claim()`
  *   navigate → network first; on a network error *or* an error response (a GitHub
  *              Pages deep link returns the `404.html` bounce page) serve the
  *              cached SPA shell so routes work offline and on hosts without
  *              rewrite rules
+ *   data     → network-first with `tikatrack-data-v1` cache fallback for the
+ *              national EPI schedule (`/api/epi-schedule`, `/epi-schedule.json`)
+ *              and synced user profile data (`/api/family/profiles`,
+ *              `/__offline/profiles.json`)
  *   assets   → cache first (every URL is content-hashed, so a hit is always
  *              correct), and fill the cache from the network on a miss
  *
@@ -25,12 +32,46 @@
 /* Build-time substitutions. `PRECACHE` keeps a valid-JS default so this file
  * stays parseable by Prettier and ESLint before the plugin rewrites it. */
 const CACHE_NAME = '{{CACHE_NAME}}';
+const DATA_CACHE_NAME = 'tikatrack-data-v1';
 const BASE = '{{BASE}}';
 const PRECACHE = /* {{PRECACHE}} */ [];
 const IS_DEV = CACHE_NAME === 'tikatrack-dev';
 
 /** The SPA shell: what a navigation falls back to when the network is gone. */
 const OFFLINE_URL = `${BASE}index.html`;
+const EPI_SCHEDULE_ASSET_URL = `${BASE}epi-schedule.json`;
+const EPI_SCHEDULE_API_URL = `${BASE}api/epi-schedule`;
+const OFFLINE_EPI_SCHEDULE_URL = `${BASE}__offline/epi-schedule.json`;
+const OFFLINE_PROFILES_URL = `${BASE}__offline/profiles.json`;
+const FAMILY_PROFILES_API_URL = `${BASE}api/family/profiles`;
+
+function createJsonResponse(data, extraHeaders) {
+  const body = JSON.stringify(data);
+  if (typeof Response === 'function') {
+    const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+    if (extraHeaders) {
+      for (const key of Object.keys(extraHeaders)) {
+        headers[key] = extraHeaders[key];
+      }
+    }
+    return new Response(body, { status: 200, headers });
+  }
+  return {
+    ok: true,
+    status: 200,
+    body,
+    type: 'basic',
+    clone: () => createJsonResponse(data, extraHeaders),
+  };
+}
+
+function toAbsoluteUrl(path) {
+  try {
+    return new URL(path, self.location.origin).href;
+  } catch {
+    return path;
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -62,7 +103,9 @@ self.addEventListener('activate', (event) => {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((key) => key.startsWith('tikatrack-') && key !== CACHE_NAME)
+          .filter(
+            (key) => key.startsWith('tikatrack-') && key !== CACHE_NAME && key !== DATA_CACHE_NAME,
+          )
           .map((key) => caches.delete(key)),
       );
       await self.clients.claim();
@@ -70,10 +113,93 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/** Lets the page ask the waiting worker to take over ("Update available"). */
+/** Lets the page manage updates and sync offline EPI schedule + profile caches. */
 self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING' || event.data?.type === 'SKIP_WAITING') {
+  const data = event.data;
+  if (data === 'SKIP_WAITING' || data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return;
+  }
+
+  if (data?.type === 'CACHE_EPI_SCHEDULE' && data.payload) {
+    event.waitUntil(
+      (async () => {
+        const dataCache = await caches.open(DATA_CACHE_NAME);
+        await Promise.all([
+          dataCache.put(
+            toAbsoluteUrl(OFFLINE_EPI_SCHEDULE_URL),
+            createJsonResponse(data.payload, { 'X-TikaTrack-Cache': 'sw-data' }),
+          ),
+          dataCache.put(
+            toAbsoluteUrl(EPI_SCHEDULE_ASSET_URL),
+            createJsonResponse(data.payload, { 'X-TikaTrack-Cache': 'sw-data' }),
+          ),
+        ]);
+        if (event.ports && event.ports[0]) {
+          event.ports[0].postMessage({ ok: true });
+        }
+      })(),
+    );
+    return;
+  }
+
+  if (data?.type === 'CACHE_PROFILES' && Array.isArray(data.profiles)) {
+    event.waitUntil(
+      (async () => {
+        const dataCache = await caches.open(DATA_CACHE_NAME);
+        const snapshot = {
+          profiles: data.profiles,
+          updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString(),
+          count: data.profiles.length,
+        };
+        await dataCache.put(
+          toAbsoluteUrl(OFFLINE_PROFILES_URL),
+          createJsonResponse(snapshot, { 'X-TikaTrack-Cache': 'sw-data' }),
+        );
+        if (event.ports && event.ports[0]) {
+          event.ports[0].postMessage({ ok: true, count: snapshot.count });
+        }
+      })(),
+    );
+    return;
+  }
+
+  if (data?.type === 'CLEAR_OFFLINE_DATA') {
+    event.waitUntil(
+      (async () => {
+        await caches.delete(DATA_CACHE_NAME);
+        if (event.ports && event.ports[0]) {
+          event.ports[0].postMessage({ ok: true });
+        }
+      })(),
+    );
+    return;
+  }
+
+  if (data?.type === 'GET_OFFLINE_STATUS') {
+    event.waitUntil(
+      (async () => {
+        const dataCache = await caches.open(DATA_CACHE_NAME);
+        const [scheduleHit, profilesHit] = await Promise.all([
+          dataCache.match(toAbsoluteUrl(OFFLINE_EPI_SCHEDULE_URL)),
+          dataCache.match(toAbsoluteUrl(OFFLINE_PROFILES_URL)),
+        ]);
+        if (event.ports && event.ports[0]) {
+          event.ports[0].postMessage({
+            ok: true,
+            hasSchedule: Boolean(scheduleHit),
+            hasProfiles: Boolean(profilesHit),
+          });
+        }
+      })(),
+    );
+    return;
+  }
+
+  if (data?.type === 'SHOW_LOCAL_NOTIFICATION' && data.title) {
+    event.waitUntil(
+      self.registration.showNotification(data.title, data.options || {}),
+    );
   }
 });
 
@@ -155,16 +281,69 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  if (IS_DEV) return;
+function isEpiScheduleRequest(url) {
+  const { pathname } = url;
+  return (
+    pathname === EPI_SCHEDULE_ASSET_URL ||
+    pathname === EPI_SCHEDULE_API_URL ||
+    pathname === OFFLINE_EPI_SCHEDULE_URL
+  );
+}
 
+function isOfflineSnapshotRequest(url) {
+  return (
+    url.pathname === OFFLINE_PROFILES_URL || url.pathname === OFFLINE_EPI_SCHEDULE_URL
+  );
+}
+
+function isProfilesApiRequest(url) {
+  return url.pathname === FAMILY_PROFILES_API_URL;
+}
+
+self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(request.mode === 'navigate' ? navigate(request, url) : asset(request, url));
+  if (IS_DEV) {
+    if (isOfflineSnapshotRequest(url)) {
+      event.respondWith(serveOfflineSnapshot(request, url));
+      return;
+    }
+    if (isEpiScheduleRequest(url)) {
+      event.respondWith(networkFirstEpiSchedule(request, url));
+      return;
+    }
+    if (isProfilesApiRequest(url)) {
+      event.respondWith(networkFirstProfileApi(request));
+      return;
+    }
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(navigate(request, url));
+    return;
+  }
+
+  if (isOfflineSnapshotRequest(url)) {
+    event.respondWith(serveOfflineSnapshot(request, url));
+    return;
+  }
+
+  if (isEpiScheduleRequest(url)) {
+    event.respondWith(networkFirstEpiSchedule(request, url));
+    return;
+  }
+
+  if (isProfilesApiRequest(url)) {
+    event.respondWith(networkFirstProfileApi(request));
+    return;
+  }
+
+  event.respondWith(asset(request, url));
 });
 
 /** Cached copy of the exact URL, otherwise the SPA shell. */
@@ -184,12 +363,68 @@ async function navigate(request, url) {
   }
 }
 
+async function serveOfflineSnapshot(request, url) {
+  const dataCache = await caches.open(DATA_CACHE_NAME);
+  const cached = (await dataCache.match(request)) || (await dataCache.match(url.href));
+  if (cached) return cached;
+  return createJsonResponse(
+    url.pathname === OFFLINE_PROFILES_URL ? { profiles: [], count: 0 } : { milestones: [] },
+    { 'X-TikaTrack-Cache': 'empty' },
+  );
+}
+
+async function networkFirstEpiSchedule(request, url) {
+  const dataCache = await caches.open(DATA_CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await dataCache.put(request, response.clone());
+      return response;
+    }
+  } catch {
+    // Fall back to Service Worker cached EPI schedule when offline.
+  }
+
+  const fromDataCache =
+    (await dataCache.match(request)) ||
+    (await dataCache.match(toAbsoluteUrl(OFFLINE_EPI_SCHEDULE_URL))) ||
+    (await dataCache.match(toAbsoluteUrl(EPI_SCHEDULE_ASSET_URL)));
+  if (fromDataCache) return fromDataCache;
+
+  const shellCache = await caches.open(CACHE_NAME);
+  const fromShellCache =
+    (await shellCache.match(request)) ||
+    (await shellCache.match(toAbsoluteUrl(EPI_SCHEDULE_ASSET_URL))) ||
+    (await shellCache.match(url.href));
+  if (fromShellCache) return fromShellCache;
+
+  return Response.error();
+}
+
+async function networkFirstProfileApi(request) {
+  const dataCache = await caches.open(DATA_CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await dataCache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cachedApi = await dataCache.match(request);
+    if (cachedApi) return cachedApi;
+    const cachedSnapshot = await dataCache.match(toAbsoluteUrl(OFFLINE_PROFILES_URL));
+    if (cachedSnapshot) return cachedSnapshot;
+    return Response.error();
+  }
+}
+
 /** Assets worth keeping: hashed bundles, icons and anything precached. */
 function isCacheable(url) {
   const { pathname } = url;
   return (
     pathname.startsWith(`${BASE}assets/`) ||
     pathname.startsWith(`${BASE}icons/`) ||
+    pathname === EPI_SCHEDULE_ASSET_URL ||
     PRECACHE.includes(pathname)
   );
 }

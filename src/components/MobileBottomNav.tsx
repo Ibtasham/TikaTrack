@@ -21,7 +21,7 @@ export function MobileBottomNav() {
   return (
     <nav
       aria-label={t('common.a11y.mainNavigation')}
-      className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200/90 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden dark:border-neutral-800 dark:bg-neutral-950/95"
+      className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-[var(--tt-border)] bg-[var(--tt-chrome)] pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
     >
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {MOBILE_ITEMS.map(({ to, labelKey, icon: Icon }) => (
@@ -33,8 +33,8 @@ export function MobileBottomNav() {
                 [
                   'relative flex min-h-[52px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-medium transition-colors',
                   isActive
-                    ? 'text-emerald-700 dark:text-emerald-300'
-                    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white',
+                    ? 'text-[var(--tt-accent)]'
+                    : 'text-[var(--tt-ink-muted)] hover:text-[var(--tt-ink)]',
                 ].join(' ')
               }
             >
@@ -42,7 +42,7 @@ export function MobileBottomNav() {
                 <>
                   {isActive && (
                     <span
-                      className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-emerald-600 dark:bg-emerald-400"
+                      className="absolute inset-x-3 top-0 h-0.5 rounded-b bg-[var(--tt-accent)]"
                       aria-hidden="true"
                     />
                   )}

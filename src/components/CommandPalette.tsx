@@ -322,10 +322,10 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label={t('nav.quickSearch')}
-        className="animate-scale-in w-full max-w-2xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+        className="animate-scale-in w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--tt-border)] bg-[var(--tt-card)] shadow-2xl"
       >
-        <div className="flex items-center gap-3 border-b border-neutral-200 px-4 py-3.5 dark:border-neutral-800">
-          <Search className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+        <div className="flex items-center gap-3 border-b border-[var(--tt-border)] px-4 py-3.5">
+          <Search className="h-5 w-5 shrink-0 text-[var(--tt-accent)]" aria-hidden="true" />
           <input
             ref={inputRef}
             type="search"
@@ -334,7 +334,7 @@ export function CommandPalette() {
             onKeyDown={handleInputKeyDown}
             placeholder={t('cmd.placeholder')}
             aria-label={t('cmd.placeholder')}
-            className={`w-full border-0 bg-transparent text-sm text-neutral-900 placeholder-neutral-400 focus:ring-0 focus:outline-none dark:text-white ${
+            className={`w-full border-0 bg-transparent text-sm text-[var(--tt-ink)] focus:ring-0 focus:outline-none ${
               isBangla ? 'font-bangla' : ''
             }`}
           />
@@ -342,7 +342,7 @@ export function CommandPalette() {
             type="button"
             onClick={() => setOpen(false)}
             aria-label={t('common.actions.close')}
-            className="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
+            className="rounded-lg p-1.5 text-[var(--tt-ink-muted)] transition-colors hover:bg-[var(--tt-subtle)] hover:text-[var(--tt-ink)]"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -384,16 +384,16 @@ export function CommandPalette() {
                       onClick={() => activate(item)}
                       className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                         isSelected
-                          ? 'bg-emerald-50 text-emerald-950 dark:bg-emerald-950/70 dark:text-emerald-100'
-                          : 'text-neutral-800 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800/70'
+                          ? 'bg-[var(--tt-accent-soft)] text-[var(--tt-accent-ink)]'
+                          : 'text-[var(--tt-ink)] hover:bg-[var(--tt-subtle)]'
                       }`}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span
                           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                             isSelected
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
+                              ? 'bg-[var(--tt-accent)] text-white'
+                              : 'bg-[var(--tt-subtle)] text-[var(--tt-ink-muted)]'
                           }`}
                           aria-hidden="true"
                         >
@@ -406,7 +406,7 @@ export function CommandPalette() {
                             {item.title}
                           </p>
                           <p
-                            className={`truncate text-xs text-neutral-500 dark:text-neutral-400 ${
+                            className={`truncate text-xs text-[var(--tt-ink-muted)] ${
                               isBangla ? 'font-bangla' : ''
                             }`}
                           >
@@ -417,8 +417,8 @@ export function CommandPalette() {
                       <ArrowRight
                         className={`h-4 w-4 shrink-0 ${
                           isSelected
-                            ? 'text-emerald-700 dark:text-emerald-300'
-                            : 'text-neutral-400 opacity-50'
+                            ? 'text-[var(--tt-accent)]'
+                            : 'text-[var(--tt-ink-muted)] opacity-50'
                         }`}
                         aria-hidden="true"
                       />

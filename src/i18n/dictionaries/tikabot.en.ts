@@ -83,4 +83,10 @@ export const en: TranslationDictionary = {
   'tikabot.studio.theme.campaign': 'EPI Emerald',
   'tikabot.studio.theme.dark': 'Night Clinic',
   'tikabot.studio.download': 'Download PNG Card',
+  'tikabot.apiError.quotaTitle': 'Gemini API quota limit reached',
+  'tikabot.apiError.title': 'Gemini assistant is temporarily unavailable',
+  'tikabot.apiError.quotaHint':
+    'Rate or quota limit reached on the active Gemini API key. Wait a moment to retry, select a billing-enabled key in Settings > Secrets, or answer using the verified Offline KB.',
+  'tikabot.apiError.retry': 'Retry with Gemini',
+  'tikabot.apiError.useOffline': 'Answer with Offline KB',
 };

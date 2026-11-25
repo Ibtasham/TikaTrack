@@ -570,9 +570,3 @@ build`, and CI runs it.
   detect tampering on the same device, and the UI says exactly that instead of
   implying a PKI it does not have.
 - No analytics, no third-party requests, no `postMessage` reporter.
-
-<!-- Replace `your-org` with your GitHub user or organisation once published. -->
-
-[2.2.0]: https://github.com/your-org/tikatrack/releases/tag/v2.2.0
-[2.1.0]: https://github.com/your-org/tikatrack/releases/tag/v2.1.0
-[2.0.0]: https://github.com/your-org/tikatrack/releases/tag/v2.0.0

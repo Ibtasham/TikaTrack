@@ -118,4 +118,10 @@ export const bn: TranslationDictionary = {
   'vaccines.detail.formulations': 'অনুমোদিত ও WHO-PQ ফর্মুলেশন',
   'vaccines.detail.openFullProfile': 'সম্পূর্ণ তথ্য',
   'vaccines.detail.quickOverview': 'সংক্ষিপ্ত',
+  'vaccines.compare.add': 'তুলনা',
+  'vaccines.compare.added': 'যুক্ত হয়েছে',
+  'vaccines.compare.barCount': 'তুলনার জন্য ৩টির মধ্যে {0}টি নির্বাচিত',
+  'vaccines.compare.open': 'তুলনা দেখুন',
+  'vaccines.compare.clear': 'মুছুন',
+  'vaccines.compare.limit': 'একসাথে সর্বোচ্চ {0}টি টিকা তুলনা করা যায়।',
 };

@@ -456,3 +456,67 @@ describe('service worker: sub-path deploy', () => {
     expect(result.body).toContain('id="root"');
   });
 });
+
+describe('service worker: offline EPI schedule and user profile caching', () => {
+  it('caches the national EPI schedule via message and serves /api/epi-schedule offline', async () => {
+    const harness = await installedHarness();
+    const payload = {
+      version: 'bangladesh-epi-2026.1',
+      milestones: [{ ageDays: 0, age: { en: 'At Birth', bn: 'জন্মের সময়' }, vaccines: [] }],
+      vaccines: [{ id: 'bcg' }],
+    };
+
+    await harness.fire('message', {
+      data: { type: 'CACHE_EPI_SCHEDULE', payload },
+    });
+
+    harness.setOnline(false);
+    const apiResult = (await harness.fire('fetch', {
+      request: request('/api/epi-schedule'),
+    })) as FakeResponse;
+
+    expect(apiResult.ok).toBe(true);
+    expect(JSON.parse(apiResult.body).version).toBe('bangladesh-epi-2026.1');
+  });
+
+  it('caches user profile data via message and serves /api/family/profiles fallback offline', async () => {
+    const harness = await installedHarness();
+    const profiles = [
+      { id: 'prof-1', name: 'Ayesha Rahman', dateOfBirth: '2025-09-01', events: [] },
+    ];
+
+    await harness.fire('message', {
+      data: { type: 'CACHE_PROFILES', profiles, updatedAt: '2026-11-24T12:00:00.000Z' },
+    });
+
+    harness.setOnline(false);
+    const snapshotResult = (await harness.fire('fetch', {
+      request: request('/__offline/profiles.json'),
+    })) as FakeResponse;
+    expect(snapshotResult.ok).toBe(true);
+    expect(JSON.parse(snapshotResult.body).profiles[0].name).toBe('Ayesha Rahman');
+
+    const apiFallback = (await harness.fire('fetch', {
+      request: request('/api/family/profiles'),
+    })) as FakeResponse;
+    expect(apiFallback.ok).toBe(true);
+    expect(JSON.parse(apiFallback.body).profiles).toHaveLength(1);
+  });
+
+  it('preserves tikatrack-data-v1 across build updates on activate and clears it on CLEAR_OFFLINE_DATA', async () => {
+    const harness = await installedHarness();
+    await harness.storage.open('tikatrack-vOLD');
+    await harness.fire('message', {
+      data: { type: 'CACHE_PROFILES', profiles: [{ id: 'p1', name: 'Nora' }] },
+    });
+
+    await harness.fire('activate');
+    const keysAfterActivate = await harness.storage.keys();
+    expect(keysAfterActivate).toContain('tikatrack-data-v1');
+    expect(keysAfterActivate).not.toContain('tikatrack-vOLD');
+
+    await harness.fire('message', { data: { type: 'CLEAR_OFFLINE_DATA' } });
+    expect(await harness.storage.keys()).not.toContain('tikatrack-data-v1');
+  });
+});
+

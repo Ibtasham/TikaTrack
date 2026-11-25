@@ -30,9 +30,13 @@ export function resolveFirebaseConfig(
   // Firebase projects can never be mixed.
   if (apiKey && projectId) {
     const authDomain =
-      readEnvString(env, 'VITE_FIREBASE_AUTH_DOMAIN') || `${projectId}.firebaseapp.com`;
+      readEnvString(env, 'VITE_FIREBASE_AUTH_DOMAIN') ||
+      (projectId === bundledConfig.projectId ? bundledConfig.authDomain : '') ||
+      `${projectId}.firebaseapp.com`;
     const storageBucket =
-      readEnvString(env, 'VITE_FIREBASE_STORAGE_BUCKET') || `${projectId}.firebasestorage.app`;
+      readEnvString(env, 'VITE_FIREBASE_STORAGE_BUCKET') ||
+      (projectId === bundledConfig.projectId ? bundledConfig.storageBucket : '') ||
+      `${projectId}.firebasestorage.app`;
     const messagingSenderId = readEnvString(env, 'VITE_FIREBASE_MESSAGING_SENDER_ID');
     const appId = readEnvString(env, 'VITE_FIREBASE_APP_ID');
     const measurementId = readEnvString(env, 'VITE_FIREBASE_MEASUREMENT_ID');

@@ -84,4 +84,10 @@ export const bn: TranslationDictionary = {
   'tikabot.studio.theme.campaign': 'ইপিআই সবুজ',
   'tikabot.studio.theme.dark': 'নাইট ক্লিনিক',
   'tikabot.studio.download': 'PNG কার্ড ডাউনলোড করুন',
+  'tikabot.apiError.quotaTitle': 'জেমিনি এপিআই কোটা সীমা পূর্ণ হয়েছে',
+  'tikabot.apiError.title': 'জেমিনি সহকারী সাময়িকভাবে পাওয়া যাচ্ছে না',
+  'tikabot.apiError.quotaHint':
+    'বর্তমান জেমিনি এপিআই কী-এর কোটা বা রেট সীমা পূর্ণ হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন, Settings > Secrets থেকে বিলিং-সক্রিয় কী বেছে নিন, অথবা অফলাইন নলেজ বেস দিয়ে উত্তর পান।',
+  'tikabot.apiError.retry': 'জেমিনি দিয়ে আবার চেষ্টা করুন',
+  'tikabot.apiError.useOffline': 'অফলাইন নলেজ বেস দিয়ে উত্তর দিন',
 };

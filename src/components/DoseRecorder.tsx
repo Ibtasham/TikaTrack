@@ -13,6 +13,7 @@ import {
   type MilestoneDose,
 } from '../lib/doseLedger';
 import { formatDate, isValidISODate, todayISO } from '../lib/format';
+import { triggerHaptic } from '../lib/haptics';
 import type { Profile, VaccinationEvent } from '../types';
 
 /**
@@ -199,6 +200,11 @@ export function DoseRecorder({
           recorded.doseNumber === null ? '' : ` · ${t('tracker.dose.number', recorded.doseNumber)}`
         }`;
 
+    const priorCount = state?.administered.length ?? 0;
+    const seriesCompleted =
+      Boolean(selected) &&
+      priorCount + 1 >= (selected?.doses.length ?? 0);
+    triggerHaptic(seriesCompleted ? 'milestone' : 'success');
     toast.success(t('tracker.dose.recorded', label), formatDate(recorded.date, language));
     if (recorded.needsReview) {
       toast.info(t('tracker.dose.review.badge'), t('tracker.dose.review.unknownNumber'));

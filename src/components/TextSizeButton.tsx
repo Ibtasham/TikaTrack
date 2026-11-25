@@ -49,7 +49,7 @@ export function TextSizeButton({ className = 'btn-ghost btn-sm' }: { className?:
         <div
           role="group"
           aria-label={t('common.label.textSize')}
-          className="animate-scale-in absolute right-0 z-50 mt-2 w-44 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+          className="animate-scale-in absolute right-0 z-50 mt-2 w-44 rounded-xl border border-[var(--tt-border)] bg-[var(--tt-card)] p-1.5 shadow-xl"
         >
           {TEXT_SIZES.map((size) => (
             <button
@@ -60,10 +60,10 @@ export function TextSizeButton({ className = 'btn-ghost btn-sm' }: { className?:
                 close();
               }}
               aria-pressed={textSize === size}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
                 textSize === size
-                  ? 'bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                  : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                  ? 'bg-[var(--tt-accent-soft)] font-semibold text-[var(--tt-accent-ink)]'
+                  : 'text-[var(--tt-ink-muted)] hover:bg-[var(--tt-subtle)] hover:text-[var(--tt-ink)]'
               }`}
             >
               <span className={`w-5 text-center ${SAMPLE_CLASS[size]}`} aria-hidden="true">

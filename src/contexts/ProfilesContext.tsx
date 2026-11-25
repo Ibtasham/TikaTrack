@@ -56,6 +56,11 @@ import {
   syncSessionWithCloudSql,
 } from '../services/cloudSync';
 import { syncWebPushSchedule } from '../lib/pushClient';
+import {
+  readCachedProfilesFromServiceWorker,
+  syncProfilesToServiceWorker,
+  syncScheduleToServiceWorker,
+} from '../lib/offlineCache';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
@@ -150,7 +155,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       : null;
   }, [profiles]);
 
-  // Hydrate once, migrating the v1 key and any 2.x profile shape if needed.
+  // Hydrate once, migrating the v1 key and any 2.x profile shape if needed,
+  // with automatic fallback to Service Worker cached profiles when offline or
+  // if localStorage was cleared.
   useEffect(() => {
     const stored = readJSONWithLegacy<unknown>(
       STORAGE_KEYS.profiles,
@@ -163,13 +170,37 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     profilesRef.current = filtered;
     setProfiles(filtered);
     setReady(true);
+
+    if (filtered.length === 0) {
+      let cancelled = false;
+      void readCachedProfilesFromServiceWorker().then((cached) => {
+        if (cancelled || !cached || cached.profiles.length === 0) return;
+        const activeTombstones = new Set(tombstonesRef.current);
+        const restored = cached.profiles.filter((p) => !activeTombstones.has(p.id));
+        if (restored.length > 0 && profilesRef.current.length === 0) {
+          profilesRef.current = restored;
+          setProfiles(restored);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    return undefined;
   }, []);
 
-  // Persist on every change (after hydration).
+  // Keep the national EPI schedule cached inside the Service Worker for offline dashboard use.
+  useEffect(() => {
+    if (!ready) return;
+    void syncScheduleToServiceWorker();
+  }, [ready]);
+
+  // Persist on every change (after hydration) to both localStorage and Service Worker cache.
   useEffect(() => {
     if (!ready) return;
     const ok = writeJSON(STORAGE_KEYS.profiles, profiles);
     setPersistent(ok);
+    void syncProfilesToServiceWorker(profiles);
   }, [profiles, ready]);
 
   // Keep multiple tabs in sync.
@@ -196,6 +227,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
   const syncNow = useCallback(async () => {
     if (!firebaseUser || import.meta.env.MODE === 'test') return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return;
+    }
     setSyncStatus('syncing');
     try {
       const tombstones = tombstonesRef.current;
@@ -288,8 +322,14 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       },
     );
 
+    const handleOnline = () => {
+      void syncNow();
+    };
+    window.addEventListener('online', handleOnline);
+
     return () => {
       cancelled = true;
+      window.removeEventListener('online', handleOnline);
       unsubscribe();
     };
   }, [firebaseUser, ready, syncNow]);
@@ -297,6 +337,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   // Debounced background push to Cloud SQL + Firestore whenever local profiles mutate while authenticated.
   useEffect(() => {
     if (!ready || !firebaseUser || suppressPushRef.current || import.meta.env.MODE === 'test') {
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return;
     }
     if (pushTimerRef.current !== null) {

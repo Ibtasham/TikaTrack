@@ -22,6 +22,10 @@ import { relativeDays } from '../lib/botContext';
 import { formatAge, formatDate, localiseNumber } from '../lib/format';
 import { analyzeSchedule, milestoneDoseName, type ScheduledDose } from '../lib/smartScheduler';
 import { computeGrowthProgress } from '../lib/whoGrowth';
+import { ClinicVisitPlanner } from './ClinicVisitPlanner';
+import { FamilyProgressChart } from './FamilyProgressChart';
+import { ProtectionMatrix } from './ProtectionMatrix';
+import { VaccineCountdown } from './VaccineCountdown';
 import type { Profile } from '../types';
 
 interface FamilyDashboardProps {
@@ -187,8 +191,13 @@ export function FamilyDashboard({ profiles }: FamilyDashboardProps) {
           </nav>
         </div>
 
+        {/* Next Scheduled Dose Countdown (Primary Profile) */}
+        <div className="mt-6">
+          <VaccineCountdown profiles={profiles} />
+        </div>
+
         {/* Row 1: Vaccination Completion Overview + Overdue & Record Review */}
-        <div className="mt-6 grid gap-5 lg:grid-cols-12">
+        <div className="mt-5 grid gap-5 lg:grid-cols-12">
           {/* Completion Overview */}
           <div className="card-padded lg:col-span-7">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -560,20 +569,27 @@ export function FamilyDashboard({ profiles }: FamilyDashboardProps) {
           </div>
         </div>
 
-        {/* Row 3: Contextual Educational Information & DGHS Helpline */}
-        <div className="mt-5 rounded-xl border border-neutral-200/90 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900/95">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/80 pb-3 dark:border-neutral-800">
+        {/* Row 3: Family Vaccination Progress Over Time + Antigen Protection Matrix + Clinic Visit Bundler */}
+        <div className="mt-5 space-y-5">
+          <FamilyProgressChart profiles={profiles} />
+          <ProtectionMatrix profiles={profiles} />
+          <ClinicVisitPlanner profiles={profiles} />
+        </div>
+
+        {/* Row 4: Contextual Educational Information & DGHS Helpline */}
+        <div className="card-padded mt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--tt-border)] pb-3">
             <h3
-              className={`flex items-center gap-2 text-sm font-bold text-neutral-900 dark:text-white ${
+              className={`flex items-center gap-2 text-sm font-bold text-[var(--tt-ink)] ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
-              <BookOpen className="h-4 w-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+              <BookOpen className="h-4 w-4 text-[var(--tt-accent)]" aria-hidden="true" />
               <span>{t('home.dashboard.educationTitle')}</span>
             </h3>
             <a
               href="tel:16263"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--tt-accent)] hover:underline"
             >
               <Phone className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{t('about.hotline')}: 16263</span>

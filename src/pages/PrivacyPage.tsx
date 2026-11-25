@@ -14,6 +14,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 
+import { ThemeAppearanceCard } from '../components/ThemePicker';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfiles } from '../contexts/ProfilesContext';
@@ -230,27 +231,30 @@ export default function PrivacyPage() {
         )}
       </section>
 
+      {/* --- Appearance & Themes ------------------------------------------ */}
+      <ThemeAppearanceCard />
+
       {/* --- Data ---------------------------------------------------------- */}
       <section className="card-padded mt-5">
         <h2
-          className={`flex items-center gap-2 text-lg font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
+          className={`flex items-center gap-2 text-lg font-bold text-[var(--tt-ink)] ${isBangla ? 'font-bangla' : ''}`}
         >
-          <Database className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          <Database className="h-5 w-5 text-[var(--tt-accent)]" aria-hidden="true" />
           {t('privacy.data')}
         </h2>
 
-        <dl className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-200/80 dark:border-neutral-800 dark:bg-neutral-800">
+        <dl className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-[var(--tt-border)] bg-[var(--tt-border)]">
           {[
             { label: t('tracker.title'), value: String(profiles.length) },
             { label: t('tracker.stats.doses'), value: String(doseCount) },
             { label: t('tracker.stats.storageKeys'), value: String(usage.keys) },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-white p-3.5 sm:p-4 dark:bg-neutral-900">
-              <dd className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+            <div key={label} className="bg-[var(--tt-card)] p-3.5 sm:p-4">
+              <dd className="text-xl font-bold tabular-nums text-[var(--tt-accent)]">
                 {value}
               </dd>
               <dt
-                className={`mt-1 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
+                className={`mt-1 text-[11px] font-semibold tracking-wider text-[var(--tt-ink-muted)] uppercase ${isBangla ? 'font-bangla' : ''}`}
               >
                 {label}
               </dt>

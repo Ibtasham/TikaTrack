@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 
 import { ChildGrowthTracker } from '../components/ChildGrowthTracker';
+import { ProtectionMatrix } from '../components/ProtectionMatrix';
 import { PageSkeleton } from '../components/Skeleton';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -541,6 +542,14 @@ export default function AnalyticsPage() {
           />
         </div>
 
+        {/* --- Antigen & Disease Protection Matrix ------------------------ */}
+        <div className="mt-5">
+          <ProtectionMatrix
+            profiles={scoped}
+            selectedProfileId={memberFilter !== 'all' ? memberFilter : undefined}
+          />
+        </div>
+
         {/* --- Per-member table ------------------------------------------- */}
         <div className="card mt-5 overflow-hidden">
           <div className="table-scroll">
@@ -575,7 +584,7 @@ export default function AnalyticsPage() {
                       className={`px-4 py-3 text-left font-medium text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
                     >
                       {profile.name}
-                      <span className="block text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                      <span className="block text-xs font-normal tabular-nums text-neutral-500 dark:text-neutral-400">
                         {formatDate(profile.dateOfBirth, language)}
                       </span>
                     </th>
@@ -587,11 +596,11 @@ export default function AnalyticsPage() {
                             style={{ width: `${stats.progressPercentage}%` }}
                           />
                         </div>
-                        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+                        <span className="text-xs font-semibold tabular-nums text-neutral-700 dark:text-neutral-200">
                           {localiseNumber(stats.progressPercentage, language)}%
                         </span>
                       </div>
-                      <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-400">
+                      <span className="mt-1 block text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
                         {localiseNumber(stats.completed, language)} /{' '}
                         {localiseNumber(stats.totalScheduled, language)}
                       </span>
@@ -602,7 +611,7 @@ export default function AnalyticsPage() {
                       {next ? (
                         <>
                           {next.vaccineName[language]}
-                          <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+                          <span className="block text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
                             {formatDate(next.scheduledDate, language)}
                           </span>
                         </>

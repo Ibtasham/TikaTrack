@@ -32,6 +32,7 @@ import { ChildGrowthTracker } from './ChildGrowthTracker';
 import { DoseHistory } from './DoseHistory';
 import { DoseRecorder } from './DoseRecorder';
 import { MemberActions } from './MemberActions';
+import { ProtectionMatrix } from './ProtectionMatrix';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import {
   analyzeSchedule,
@@ -52,6 +53,7 @@ import {
 } from '../lib/intelligentReminders';
 import { useI18n } from '../i18n';
 import { formatAge, formatDate, isValidISODate, localiseNumber, todayISO } from '../lib/format';
+import { triggerHaptic } from '../lib/haptics';
 
 type ProfileGender = NonNullable<Profile['gender']>;
 
@@ -114,7 +116,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
   const { t, language } = useI18n();
   const isBangla = language === 'bn';
   const toast = useToast();
-  const { updateProfile } = useProfiles();
+  const { updateProfile, recordDoseEvent } = useProfiles();
 
   // Keep selectedProfile valid whenever profiles hydrate or change externally.
   useEffect(() => {
@@ -283,6 +285,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
     setNewRelationship('child');
     setNewGender('female');
     setShowAddProfile(false);
+    triggerHaptic('success');
     toast.success(t('tracker.profileAdded', result.profile.name));
   };
 
@@ -315,6 +318,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
       relationship: editRelationship,
       gender: editGender,
     });
+    triggerHaptic('success');
     toast.success(t('tracker.member.updated', trimmed));
     setEditingProfileId(null);
   };
@@ -326,6 +330,7 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
     if (selectedProfile === id) setSelectedProfile(remaining[0]?.id || '');
     if (editingProfileId === id) setEditingProfileId(null);
     setConfirmDeleteProfile(null);
+    triggerHaptic('remove');
     if (removed) toast.info(t('tracker.profileDeleted', removed.name));
   };
 
@@ -333,6 +338,25 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
     const newPreferences = { ...preferences, ...updates };
     setPreferences(newPreferences);
     saveReminderPreferences(newPreferences);
+    triggerHaptic('toggle');
+  };
+
+  const handleQuickCompleteDose = (vaccineId: string, doseNumber: number, label: string) => {
+    if (!currentProfile) return;
+    const today = todayISO();
+    const result = recordDoseEvent(currentProfile.id, {
+      vaccineId,
+      doseNumber,
+      date: today,
+      provenance: 'manual',
+    });
+    if (result.error || !result.event) {
+      toast.error(t(`tracker.dose.error.${result.error ?? 'missing-vaccine'}`));
+      return;
+    }
+    const isFinalVisitDose = nextVisitBundle.doses.length <= 1;
+    triggerHaptic(isFinalVisitDose ? 'milestone' : 'success');
+    toast.success(t('tracker.dose.recorded', label), formatDate(today, language));
   };
 
   const triggerPrefillRecord = (vaccineId: string, doseNumber?: number) => {
@@ -1137,16 +1161,17 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                         >
                           {milestoneDoseName(dose, language)}
                         </p>
-                        <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                          <span>{formatDate(dose.scheduledDate, language)}</span>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-neutral-500 dark:text-neutral-400">
+                          <span className="tabular-nums">{formatDate(dose.scheduledDate, language)}</span>
+                          <span aria-hidden="true">·</span>
                           <span
-                            className={
+                            className={`status-inline ${
                               dose.status === 'overdue'
-                                ? 'badge-overdue'
+                                ? 'text-red-700 dark:text-red-400'
                                 : dose.status === 'due-today'
-                                  ? 'badge-due'
-                                  : 'badge-upcoming'
-                            }
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : 'text-sky-700 dark:text-sky-400'
+                            }`}
                           >
                             {dose.status === 'overdue'
                               ? t('tracker.status.overdue')
@@ -1156,14 +1181,30 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                           </span>
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-secondary btn-sm shrink-0 no-print"
-                        onClick={() => triggerPrefillRecord(dose.vaccineId, dose.doseNumber)}
-                      >
-                        <ClipboardPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span>{t('tracker.visit.recordThis')}</span>
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1.5 no-print">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm whitespace-nowrap shrink-0"
+                          onClick={() =>
+                            handleQuickCompleteDose(
+                              dose.vaccineId,
+                              dose.doseNumber,
+                              milestoneDoseName(dose, language),
+                            )
+                          }
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t('tracker.visit.markGiven')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                          onClick={() => triggerPrefillRecord(dose.vaccineId, dose.doseNumber)}
+                        >
+                          <ClipboardPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t('tracker.visit.recordThis')}</span>
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1266,6 +1307,15 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                 <span className={isBangla ? 'font-bangla' : undefined}>{t('growth.quickCard.open')}</span>
               </button>
             </div>
+          </div>
+
+          {/* Antigen & Disease Protection Matrix */}
+          <div className="card-padded no-print">
+            <ProtectionMatrix
+              profiles={[currentProfile]}
+              selectedProfileId={currentProfile.id}
+              compact
+            />
           </div>
 
           {/* Every dose this member has, with correction and deletion. */}
@@ -1460,15 +1510,15 @@ export default function SmartTracker({ profiles, setProfiles }: SmartTrackerProp
                       {formatDate(reminder.scheduledDate, language)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 no-print">
+                  <div className="flex items-center gap-3 no-print">
                     <span
-                      className={
+                      className={`status-inline ${
                         reminder.reminderType === 'overdue'
-                          ? 'badge-overdue'
+                          ? 'text-red-700 dark:text-red-400'
                           : reminder.reminderType === 'on-due'
-                            ? 'badge-due'
-                            : 'badge-upcoming'
-                      }
+                            ? 'text-amber-700 dark:text-amber-300'
+                            : 'text-sky-700 dark:text-sky-400'
+                      }`}
                     >
                       {reminder.reminderType === 'overdue'
                         ? t('tracker.status.overdue')

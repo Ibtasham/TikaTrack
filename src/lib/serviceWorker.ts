@@ -104,6 +104,23 @@ export async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistrati
 }
 
 /**
+ * Ensure the service worker is registered so offline EPI schedule and user
+ * profile caching (`tikatrack-data-v1`) is active even in non-production
+ * preview sessions.
+ */
+export async function ensureOfflineDataServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!isServiceWorkerSupported()) return null;
+  try {
+    return await navigator.serviceWorker.register(serviceWorkerUrl(), {
+      scope: import.meta.env.BASE_URL,
+    });
+  } catch (error) {
+    console.warn('[sw] offline cache worker registration failed', error);
+    return null;
+  }
+}
+
+/**
  * Ask the waiting worker to take over and reload once it controls the page.
  *
  * Resolves `true` when the reload was triggered. A 5 s watchdog covers hosts

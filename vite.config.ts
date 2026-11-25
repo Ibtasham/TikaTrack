@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { buildEpiScheduleSnapshot } from './src/lib/epiScheduleSnapshot.ts';
 
 function resolveBase(): string {
   let raw = process.env.VITE_BASE?.trim();
@@ -30,7 +31,6 @@ async function listPublicFiles(dir: string, prefix = ''): Promise<string[]> {
   }
   const files: string[] = [];
   for (const entry of entries) {
-    if (entry.name === 'aistudio') continue;
     const path = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) files.push(...(await listPublicFiles(join(dir, entry.name), path)));
     else files.push(`/${path}`);
@@ -64,8 +64,10 @@ function pwaAssets(): Plugin {
   const swPath = fileURLToPath(new URL('./sw.template.js', import.meta.url));
   const manifestHref = `${base}manifest.webmanifest`;
   const swHref = `${base}sw.js`;
+  const scheduleHref = `${base}epi-schedule.json`;
   const renderManifest = async (): Promise<string> =>
     (await readFile(manifestPath, 'utf8')).split('{{BASE}}').join(base);
+  const renderScheduleJson = (): string => JSON.stringify(buildEpiScheduleSnapshot());
   const renderDevSw = async (): Promise<string> =>
     (await readFile(swPath, 'utf8'))
       .split('{{CACHE_NAME}}')
@@ -91,6 +93,12 @@ function pwaAssets(): Plugin {
             .catch(next);
           return;
         }
+        if (pathname === scheduleHref) {
+          response.setHeader('Content-Type', 'application/json; charset=utf-8');
+          response.setHeader('Cache-Control', 'public, max-age=300');
+          response.end(renderScheduleJson());
+          return;
+        }
         if (pathname === swHref) {
           renderDevSw()
             .then((body) => {
@@ -110,6 +118,11 @@ function pwaAssets(): Plugin {
         fileName: 'manifest.webmanifest',
         source: await renderManifest(),
       });
+      this.emitFile({
+        type: 'asset',
+        fileName: 'epi-schedule.json',
+        source: renderScheduleJson(),
+      });
 
       const emitted = Object.keys(bundle).filter(
         (name) => !name.endsWith('.map') && name !== '.nojekyll',
@@ -120,6 +133,7 @@ function pwaAssets(): Plugin {
           ...(await listPublicFiles(PUBLIC_DIR)),
           '/index.html',
           '/manifest.webmanifest',
+          '/epi-schedule.json',
         ]),
       ].sort();
       const precache = shellFiles.map((file) => `${base}${file.replace(/^\//, '')}`);

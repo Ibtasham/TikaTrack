@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -80,14 +80,17 @@ describe('FamilyDashboard', () => {
     renderDashboard([profile]);
 
     expect(screen.getByText(en['home.dashboard.eyebrow'])).toBeTruthy();
+    expect(screen.getByTestId('vaccine-countdown')).toBeTruthy();
+    expect(screen.getByText(en['home.dashboard.countdownTitle'])).toBeTruthy();
     expect(screen.getByText(en['home.dashboard.completionTitle'])).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: en['home.dashboard.completionTitle'] })).toBeTruthy();
 
     // Quick action navigation links
-    expect(screen.getByRole('link', { name: en['home.dashboard.action.record'] }).getAttribute('href')).toBe('/tracker');
-    expect(screen.getByRole('link', { name: en['home.dashboard.action.schedule'] }).getAttribute('href')).toBe('/schedule');
-    expect(screen.getByRole('link', { name: en['home.dashboard.action.passport'] }).getAttribute('href')).toBe('/passport');
-    expect(screen.getByRole('link', { name: en['home.dashboard.action.centres'] }).getAttribute('href')).toBe('/centres');
+    const quickNav = screen.getByRole('navigation', { name: en['home.dashboard.quickActions'] });
+    expect(within(quickNav).getByRole('link', { name: en['home.dashboard.action.record'] }).getAttribute('href')).toBe('/tracker');
+    expect(within(quickNav).getByRole('link', { name: en['home.dashboard.action.schedule'] }).getAttribute('href')).toBe('/schedule');
+    expect(within(quickNav).getByRole('link', { name: en['home.dashboard.action.passport'] }).getAttribute('href')).toBe('/passport');
+    expect(within(quickNav).getByRole('link', { name: en['home.dashboard.action.centres'] }).getAttribute('href')).toBe('/centres');
 
     // Growth telemetry & family summary
     expect(screen.getAllByText('Ayaan Karim').length).toBeGreaterThan(0);
@@ -132,6 +135,7 @@ describe('FamilyDashboard', () => {
     renderDashboard([profile]);
 
     expect(screen.getByText(bn['home.dashboard.eyebrow'])).toBeTruthy();
+    expect(screen.getByText(bn['home.dashboard.countdownTitle'])).toBeTruthy();
     expect(screen.getByText(bn['home.dashboard.completionTitle'])).toBeTruthy();
     expect(screen.getByText(bn['home.dashboard.educationTitle'])).toBeTruthy();
     expect(screen.getByText(/৬\.৪ kg/)).toBeTruthy();

@@ -31,6 +31,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
 import { downloadCSV } from '../lib/exporters';
 import { formatAge, formatDate, localiseNumber, todayISO } from '../lib/format';
+import { triggerHaptic } from '../lib/haptics';
 import {
   ageInMonths,
   assessBmiForAge5to19,
@@ -263,6 +264,7 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
         return;
       }
       resetForm();
+      triggerHaptic('success');
       toast.success(t('growth.log.updated'));
       return;
     }
@@ -278,6 +280,7 @@ export function ChildGrowthTracker({ profile, preferredProfileId }: ChildGrowthT
       return;
     }
     resetForm();
+    triggerHaptic('success');
     toast.success(t('growth.log.saved', activeProfile.name));
   };
 

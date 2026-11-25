@@ -14,6 +14,7 @@ import {
   vaccineIdsInLedger,
 } from '../lib/doseLedger';
 import { formatDate, isValidISODate, todayISO } from '../lib/format';
+import { triggerHaptic } from '../lib/haptics';
 import type { Profile, VaccinationEvent } from '../types';
 
 interface Draft {
@@ -129,6 +130,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
       notes: draft.notes.trim() || null,
     });
     cancelEditing();
+    triggerHaptic('success');
     toast.success(t('tracker.dose.updated'), doseLabel(event));
   };
 
@@ -138,6 +140,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
     removeDoseEvent(profile.id, confirmDelete.id);
     if (editingId === confirmDelete.id) cancelEditing();
     setConfirmDelete(null);
+    triggerHaptic('remove');
     toast.success(t('tracker.dose.deleted', label));
   };
 
@@ -148,6 +151,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
     removeVaccineHistory(profile.id, confirmVaccine);
     if (editingId && !events.find((event) => event.id === editingId)) cancelEditing();
     setConfirmVaccine(null);
+    triggerHaptic('remove');
     toast.success(t('tracker.dose.deleteVaccine.done', name, count));
   };
 
@@ -466,6 +470,7 @@ export function DoseHistory({ profile, className = '' }: { profile: Profile; cla
                                       if (!value) return;
                                       resolveDoseReview(profile.id, event.id, Number(value));
                                       change.target.value = '';
+                                      triggerHaptic('toggle');
                                       toast.success(
                                         t('tracker.dose.review.saved'),
                                         doseLabel({ ...event, doseNumber: Number(value) }),

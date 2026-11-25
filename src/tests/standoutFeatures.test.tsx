@@ -23,10 +23,11 @@ function LocationProbe() {
 }
 
 describe('Bespoke Logo & Favicon upgrade', () => {
-  it('renders custom architectural SVG monogram without blur glows across variants', () => {
+  it('renders the main TikaTrack logo image cleanly across variants', () => {
     const { container, rerender } = render(<Logo size="sm" showText={false} />);
-    const svg = container.querySelector('svg[aria-label="TikaTrack emblem"]');
-    expect(svg).not.toBeNull();
+    const img = container.querySelector('img[alt="TikaTrack logo"]');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toContain('/icons/tikatrack-logo.png');
     expect(container.querySelector('.blur-lg')).toBeNull();
     expect(screen.queryByText(/TikaTrack/i)).toBeNull();
 

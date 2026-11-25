@@ -98,30 +98,51 @@ export async function syncSessionWithCloudSql(
   deletedIds?: ReadonlyArray<string>,
 ): Promise<CloudSyncSessionResult> {
   const token = await getIdToken(firebaseUser);
-  const res = await fetch('/api/family/sync-session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await fetch('/api/family/sync-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    throw new Error(`Cloud SQL sync session failed (${res.status})`);
+    if (!res.ok) {
+      throw new Error(`Cloud SQL sync session failed (${res.status})`);
+    }
+
+    const data = (await res.json()) as { profiles?: Profile[] };
+    const sqlProfiles = Array.isArray(data.profiles) ? data.profiles : [];
+    const merged = mergeCloudAndLocalProfiles(localProfiles, sqlProfiles, deletedIds);
+
+    if (merged.length > 0 || (deletedIds && deletedIds.length > 0)) {
+      await pushProfilesToCloudSql(firebaseUser, merged);
+    }
+
+    return {
+      profiles: merged,
+      syncedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    // When offline, try the Service Worker's cached GET /api/family/profiles response.
+    const cachedRes = await fetch('/api/family/profiles', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }).catch(() => null);
+
+    if (cachedRes && cachedRes.ok) {
+      const data = (await cachedRes.json()) as { profiles?: Profile[] };
+      const cachedProfiles = Array.isArray(data.profiles) ? data.profiles : [];
+      return {
+        profiles: mergeCloudAndLocalProfiles(localProfiles, cachedProfiles, deletedIds),
+        syncedAt: new Date().toISOString(),
+      };
+    }
+
+    throw err;
   }
-
-  const data = (await res.json()) as { profiles?: Profile[] };
-  const sqlProfiles = Array.isArray(data.profiles) ? data.profiles : [];
-  const merged = mergeCloudAndLocalProfiles(localProfiles, sqlProfiles, deletedIds);
-
-  if (merged.length > 0 || (deletedIds && deletedIds.length > 0)) {
-    await pushProfilesToCloudSql(firebaseUser, merged);
-  }
-
-  return {
-    profiles: merged,
-    syncedAt: new Date().toISOString(),
-  };
 }
 
 export async function pushProfilesToCloudSql(

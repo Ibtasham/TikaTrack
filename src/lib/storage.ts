@@ -11,6 +11,7 @@ export const STORAGE_PREFIX = 'tikatrack.';
 export const STORAGE_KEYS = {
   profiles: `${STORAGE_PREFIX}profiles`,
   theme: `${STORAGE_PREFIX}theme`,
+  palette: `${STORAGE_PREFIX}palette`,
   textSize: `${STORAGE_PREFIX}textSize`,
   language: `${STORAGE_PREFIX}language`,
   reminders: 'tikatrack-reminders',
@@ -18,6 +19,7 @@ export const STORAGE_KEYS = {
   sentNotifications: 'tikatrack-sent-notifications',
   acknowledgedReminders: 'tikatrack-acknowledged-reminders',
   passports: `${STORAGE_PREFIX}passports`,
+  biometricVault: `${STORAGE_PREFIX}biometric-vault`,
   compare: `${STORAGE_PREFIX}compare-selection`,
   onboardingDismissed: `${STORAGE_PREFIX}onboarding-dismissed`,
 } as const;

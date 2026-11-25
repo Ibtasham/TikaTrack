@@ -120,4 +120,10 @@ export const en: TranslationDictionary = {
   'vaccines.detail.formulations': 'Licensed & WHO-PQ formulations',
   'vaccines.detail.openFullProfile': 'Full monograph',
   'vaccines.detail.quickOverview': 'Quick view',
+  'vaccines.compare.add': 'Compare',
+  'vaccines.compare.added': 'Compared',
+  'vaccines.compare.barCount': '{0} of 3 selected for side-by-side comparison',
+  'vaccines.compare.open': 'Open comparison',
+  'vaccines.compare.clear': 'Clear',
+  'vaccines.compare.limit': 'You can compare up to {0} vaccines at once.',
 };

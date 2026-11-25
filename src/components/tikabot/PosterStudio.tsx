@@ -212,14 +212,24 @@ export function PosterStudio() {
           useSearchGrounding: false,
         }),
       });
-      if (!res.ok) throw new Error('Could not generate tip');
-      const data = (await res.json()) as { text?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        text?: string;
+        error?: string;
+        quotaExceeded?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(
+          res.status === 429 || data.quotaExceeded
+            ? t('tikabot.apiError.quotaTitle')
+            : data.error || t('common.status.error'),
+        );
+      }
       if (data.text?.trim()) {
         setAiTip(data.text.trim().replace(/^["']|["']$/g, '').slice(0, 220));
         toast.success(t('tikabot.studio.tipUpdated'));
       }
-    } catch {
-      toast.error(t('common.status.error'));
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : t('common.status.error'));
     } finally {
       setGeneratingTip(false);
     }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="light" data-theme="light">
+<html lang="en" class="light" data-theme="light" data-palette="wood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -22,7 +22,7 @@
       property="og:description"
       content="Bilingual (English / বাংলা) vaccination platform for Bangladesh with official EPI schedules, dose-level family tracking, verified centres, digital QR passport, and an offline assistant."
     />
-    <meta property="og:image" content="/icons/og-cover.png" />
+    <meta property="og:image" content="/icons/tikatrack-logo.png" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:locale:alternate" content="bn_BD" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -31,14 +31,22 @@
       name="twitter:description"
       content="Source-backed vaccination schedules, family tracking and centre finder for Bangladesh."
     />
-    <meta name="twitter:image" content="/icons/og-cover.png" />
+    <meta name="twitter:image" content="/icons/tikatrack-logo.png" />
 
     <!-- Installable / PWA -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" href="/icons/tikatrack-logo.png" />
+    <link rel="apple-touch-icon" href="/icons/tikatrack-logo.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="TikaTrack" />
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Web fonts (non-blocking display=swap with local platform stack fallback) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    />
 
     <script>
       // Apply the saved theme + language before first paint to avoid a flash.
@@ -53,6 +61,12 @@
           root.classList.remove('light', 'dark');
           root.classList.add(theme);
           root.setAttribute('data-theme', theme);
+          var palette = localStorage.getItem('tikatrack.palette');
+          var validPalettes = ['wood', 'bamboo', 'botanical', 'terracotta', 'coastal', 'indigo'];
+          root.setAttribute(
+            'data-palette',
+            validPalettes.indexOf(palette) !== -1 ? palette : 'wood',
+          );
           var textSize = localStorage.getItem('tikatrack.textSize');
           if (textSize === 'large' || textSize === 'xlarge') {
             root.setAttribute('data-text-size', textSize);

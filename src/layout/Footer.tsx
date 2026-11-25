@@ -34,7 +34,7 @@ export function Footer() {
 
   const column = (title: string, links: ReadonlyArray<{ to: string; labelKey: string }>) => (
     <div>
-      <h3 className="text-xs font-semibold tracking-wider text-neutral-900 uppercase dark:text-white">
+      <h3 className="text-xs font-semibold tracking-wider text-[var(--tt-ink)] uppercase">
         {title}
       </h3>
       <ul className="mt-3 space-y-2.5">
@@ -42,7 +42,7 @@ export function Footer() {
           <li key={to}>
             <Link
               to={to}
-              className={`text-sm text-neutral-600 transition-colors hover:text-emerald-700 dark:text-neutral-400 dark:hover:text-emerald-400 ${
+              className={`text-sm text-[var(--tt-ink-muted)] transition-colors hover:text-[var(--tt-accent)] ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -55,18 +55,18 @@ export function Footer() {
   );
 
   return (
-    <footer className="mt-auto border-t border-neutral-200/90 bg-white pb-18 lg:pb-0 dark:border-neutral-800 dark:bg-neutral-950">
+    <footer className="mt-auto border-t border-[var(--tt-border)] bg-[var(--tt-chrome-solid)] pb-18 lg:pb-0">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2.5">
               <Logo size="sm" showText={false} />
-              <span className="text-base font-bold tracking-tight text-neutral-900 dark:text-white">
+              <span className="text-base font-bold tracking-tight text-[var(--tt-ink)]">
                 TikaTrack
               </span>
             </div>
             <p
-              className={`mt-3 max-w-sm text-sm leading-relaxed text-neutral-600 dark:text-neutral-400 ${
+              className={`mt-3 max-w-sm text-sm leading-relaxed text-[var(--tt-ink-muted)] ${
                 isBangla ? 'font-bangla' : ''
               }`}
             >
@@ -81,8 +81,8 @@ export function Footer() {
               {t('about.hotline')}: <span className="tabular-nums">16263</span>
             </a>
 
-            <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
+            <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-[var(--tt-ink-muted)]">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--tt-accent)]" aria-hidden="true" />
               <span className={isBangla ? 'font-bangla' : undefined}>{t('footer.disclaimer')}</span>
             </p>
           </div>
@@ -92,7 +92,7 @@ export function Footer() {
           {column(t('footer.legal'), LEGAL_LINKS)}
         </div>
 
-        <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200/80 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800 dark:text-neutral-400">
+        <div className="mt-10 flex flex-col gap-2 border-t border-[var(--tt-border)] pt-6 text-xs text-[var(--tt-ink-muted)] sm:flex-row sm:items-center sm:justify-between">
           <p className="tabular-nums">
             © {year} TikaTrack · v{APP_VERSION} · {t('footer.rights')}
           </p>

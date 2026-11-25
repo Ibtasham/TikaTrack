@@ -828,7 +828,7 @@ export default function ScheduleTimeline() {
 
                             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/80 pt-2.5 text-xs dark:border-neutral-800">
                               {isRecorded ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                                <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                                   <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                                   {recordedDate
                                     ? t('schedule.recordedOn', formatDate(recordedDate, language))

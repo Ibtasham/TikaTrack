@@ -219,6 +219,7 @@ export const bn: TranslationDictionary = {
   'tracker.visit.titleUpcoming': 'পরবর্তী ইপিআই ভিজিট চেকলিস্ট',
   'tracker.visit.dueDate': 'নির্ধারিত তারিখ: {0}',
   'tracker.visit.recordThis': 'যুক্ত করুন',
+  'tracker.visit.markGiven': 'সম্পন্ন',
   'tracker.visit.allDone': 'ইপিআই সূচির সব নির্ধারিত ডোজ যুক্ত হয়েছে।',
   'tracker.care.title': 'টিকা নেওয়ার পর করণীয়',
   'tracker.care.normalTitle': 'সাধারণ প্রতিক্রিয়া (২৪–৪৮ ঘণ্টা)',

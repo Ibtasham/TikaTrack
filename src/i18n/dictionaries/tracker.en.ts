@@ -222,6 +222,7 @@ export const en: TranslationDictionary = {
   'tracker.visit.titleUpcoming': 'Next EPI visit checklist',
   'tracker.visit.dueDate': 'Scheduled for {0}',
   'tracker.visit.recordThis': 'Record',
+  'tracker.visit.markGiven': 'Mark given',
   'tracker.visit.allDone': 'Every scheduled EPI dose has been recorded.',
   'tracker.care.title': 'After your vaccination visit',
   'tracker.care.normalTitle': 'Common reactions (24–48 hours)',

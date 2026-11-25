@@ -1,14 +1,22 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Filter, Search, Syringe, X } from 'lucide-react';
+import { ArrowRight, Check, Filter, Plus, Scale, Search, Syringe, X } from 'lucide-react';
 
 import { Skeleton } from '../components/Skeleton';
 import { VaccineModal } from '../components/VaccineModal';
-import { useDebouncedValue } from '../hooks';
+import { useToast } from '../contexts/ToastContext';
+import { useDebouncedValue, usePersistentState } from '../hooks';
 import { useI18n } from '../i18n';
 import { getVaccineClinicalProfile } from '../data/vaccineClinicalDetails';
 import { evidenceForLegacy, type ProgrammeClass } from '../data/evidence';
 import { allVaccines, vaccineColors, type Vaccine } from '../data/vaccines';
+import { STORAGE_KEYS } from '../lib/storage';
+
+const MAX_COMPARE = 3;
+
+function isIdList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
 
 const CATEGORIES = ['routine', 'campaign', 'special', 'recommended', 'non_routine'] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -55,6 +63,7 @@ function accentBg(colour: string): string {
  */
 export default function VaccinesPage() {
   const { t, language } = useI18n();
+  const toast = useToast();
   const isBangla = language === 'bn';
 
   const [query, setQuery] = useState('');
@@ -63,6 +72,31 @@ export default function VaccinesPage() {
   const [ageGroup, setAgeGroup] = useState<string>('all');
   const [sort, setSort] = useState<SortKey>('name');
   const [selected, setSelected] = useState<Vaccine | null>(null);
+  const [compareIds, setCompareIds] = usePersistentState<string[]>(
+    STORAGE_KEYS.compare,
+    [],
+    isIdList,
+  );
+
+  const toggleCompare = (id: string) => {
+    if (compareIds.includes(id)) {
+      setCompareIds(compareIds.filter((entry) => entry !== id));
+      return;
+    }
+    if (compareIds.length >= MAX_COMPARE) {
+      toast.warning(t('vaccines.compare.limit', MAX_COMPARE));
+      return;
+    }
+    setCompareIds([...compareIds, id]);
+  };
+
+  const comparedVaccines = useMemo(
+    () =>
+      compareIds
+        .map((id) => allVaccines.find((v) => v.id === id))
+        .filter((v): v is Vaccine => Boolean(v)),
+    [compareIds],
+  );
 
   const debouncedQuery = useDebouncedValue(query, 200);
 
@@ -380,7 +414,7 @@ export default function VaccinesPage() {
                     </div>
                   </dl>
 
-                  <div className="mt-auto flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                  <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
                     <Link
                       to={`/vaccines/${vaccine.id}`}
                       className="btn-secondary btn-sm flex-1 whitespace-nowrap shrink-0"
@@ -394,6 +428,28 @@ export default function VaccinesPage() {
                       aria-label={`${t('vaccines.detail.quickOverview')}: ${vaccine.name.en}`}
                     >
                       {t('vaccines.detail.quickOverview')}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={compareIds.includes(vaccine.id)}
+                      onClick={() => toggleCompare(vaccine.id)}
+                      className={`btn-sm inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                        compareIds.includes(vaccine.id)
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-200'
+                          : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                      }`}
+                    >
+                      {compareIds.includes(vaccine.id) ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t('vaccines.compare.added')}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{t('vaccines.compare.add')}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -409,6 +465,41 @@ export default function VaccinesPage() {
           <Skeleton className="h-40 rounded-[var(--radius-card)]" />
           <Skeleton className="h-40 rounded-[var(--radius-card)]" />
           <Skeleton className="h-40 rounded-[var(--radius-card)]" />
+        </div>
+      )}
+
+      {/* Floating Side-by-Side Comparison Bar */}
+      {comparedVaccines.length > 0 && (
+        <div className="no-print fixed inset-x-4 bottom-16 z-30 mx-auto max-w-4xl rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-[var(--shadow-elevated)] backdrop-blur-md lg:bottom-5 dark:border-emerald-800/80 dark:bg-neutral-900/95">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Scale
+                className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold tabular-nums text-neutral-900 dark:text-white">
+                  {t('vaccines.compare.barCount', comparedVaccines.length)}
+                </p>
+                <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                  {comparedVaccines.map((v) => v.name[language]).join(' · ')}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setCompareIds([])}
+              >
+                {t('vaccines.compare.clear')}
+              </button>
+              <Link to="/compare" className="btn-primary btn-sm whitespace-nowrap shrink-0">
+                <span>{t('vaccines.compare.open')}</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

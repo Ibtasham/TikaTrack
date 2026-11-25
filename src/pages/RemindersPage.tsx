@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { useOptionalAuth } from '../contexts/AuthContext';
+import { useLocalNotifications } from '../hooks';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
@@ -45,10 +46,23 @@ import {
   reminderAlarmOffsets,
   saveReminderPreferences,
   saveReminders,
-  sendBrowserNotification,
   type Reminder,
   type ReminderPreferences,
 } from '../lib/intelligentReminders';
+import {
+  checkDueLocalNotificationsNow,
+  loadLocalNotificationSettings,
+  requestLocalNotificationPermission,
+  saveLocalNotificationSettings,
+  sendTestLocalNotification,
+  syncLocalNotificationSchedule,
+  type LocalNotificationSettings,
+} from '../lib/localNotifications';
+import {
+  isHapticsEnabled,
+  setHapticsEnabled,
+  triggerHaptic,
+} from '../lib/haptics';
 import {
   getWebPushStatus,
   isWebPushSupported,
@@ -98,6 +112,12 @@ export default function RemindersPage() {
     endpoint: null,
   });
   const [pushBusy, setPushBusy] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
+  const [localSettings, setLocalSettings] = useState<LocalNotificationSettings>(() =>
+    loadLocalNotificationSettings(),
+  );
+  const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(() => isHapticsEnabled());
+  const localSnapshot = useLocalNotifications();
 
   const upcomingPushDoses = useMemo(() => buildUpcomingPushDoses(profiles), [profiles]);
   const dueWithin48Hours = useMemo(() => findUpcoming48HourDoses(profiles), [profiles]);
@@ -114,6 +134,10 @@ export default function RemindersPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    void syncLocalNotificationSchedule(profiles, preferences, language);
+  }, [profiles, preferences, language, localSettings.preferredTime]);
 
   const vaccineName = useMemo(
     () => new Map(allVaccines.map((vaccine) => [vaccine.id, vaccine.name])),
@@ -213,6 +237,7 @@ export default function RemindersPage() {
     saveReminderPreferences(next);
     setPreferences(next);
     const count = rebuild(next).length;
+    void syncLocalNotificationSchedule(profiles, next, language);
     if (pushStatus.subscribed) {
       void syncWebPushSchedule({
         profiles,
@@ -221,25 +246,66 @@ export default function RemindersPage() {
         firebaseUser,
       });
     }
+    triggerHaptic('success');
     toast.success(t('reminders.settings.saved'), t('reminders.refreshed', count));
   };
 
-  const handleRequestPermission = async () => {
-    if (typeof Notification === 'undefined') {
-      toast.error(t('reminders.permission.unsupported'));
-      return;
-    }
-    const result = await Notification.requestPermission();
-    setNotificationPermission(result);
-    if (result === 'granted') {
-      toast.success(t('reminders.permission.granted'));
-      setDraft((previous) => ({ ...previous, browserNotifications: true }));
-      if (isWebPushSupported()) {
-        await handleEnableWebPush();
+  const handleEnableLocalNotifications = async () => {
+    setLocalBusy(true);
+    try {
+      if (typeof Notification === 'undefined') {
+        toast.error(t('reminders.permission.unsupported'));
+        return;
       }
-    } else {
-      toast.warning(t('reminders.permission.denied'));
+      const result = await requestLocalNotificationPermission();
+      setNotificationPermission(result);
+      if (result === 'granted') {
+        const nextPrefs = { ...preferences, enabled: true, browserNotifications: true };
+        saveReminderPreferences(nextPrefs);
+        setPreferences(nextPrefs);
+        setDraft(nextPrefs);
+        await syncLocalNotificationSchedule(profiles, nextPrefs, language);
+        triggerHaptic('success');
+        toast.success(t('reminders.local.enabledToast'));
+      } else {
+        toast.warning(t('reminders.permission.denied'));
+      }
+    } finally {
+      setLocalBusy(false);
     }
+  };
+
+  const handlePauseLocalNotifications = () => {
+    const nextPrefs = { ...preferences, browserNotifications: false };
+    saveReminderPreferences(nextPrefs);
+    setPreferences(nextPrefs);
+    setDraft(nextPrefs);
+    void syncLocalNotificationSchedule(profiles, nextPrefs, language);
+    triggerHaptic('toggle');
+    toast.info(t('reminders.local.paused'));
+  };
+
+  const handleSyncLocalNotifications = async () => {
+    setLocalBusy(true);
+    try {
+      const res = await checkDueLocalNotificationsNow(profiles, preferences, language);
+      triggerHaptic('toggle');
+      toast.success(
+        t(
+          'reminders.local.syncedToast',
+          localiseNumber(res.dispatchedNow, language),
+          localiseNumber(res.scheduledCount, language),
+        ),
+      );
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
+  const handleAlertTimeChange = (nextTime: string) => {
+    const updated = saveLocalNotificationSettings(nextTime);
+    setLocalSettings(updated);
+    void syncLocalNotificationSchedule(profiles, preferences, language);
   };
 
   const handleEnableWebPush = async () => {
@@ -320,23 +386,33 @@ export default function RemindersPage() {
   };
 
   const handleTestNotification = async () => {
-    const ok = await sendBrowserNotification(
-      t('reminders.test.title'),
-      t('reminders.permission.body'),
-      'tikatrack-test',
-    );
-    if (ok) toast.success(t('reminders.permission.granted'));
-    else toast.error(t('reminders.permission.denied'), t('reminders.permission.hint'));
+    setLocalBusy(true);
+    try {
+      const res = await sendTestLocalNotification(language, localSnapshot.nextScheduled);
+      setNotificationPermission(
+        typeof Notification === 'undefined' ? 'denied' : Notification.permission,
+      );
+      if (res.ok) {
+        triggerHaptic('success');
+        toast.success(t('reminders.local.testSent'), t('reminders.local.testBody'));
+      } else {
+        toast.error(t('reminders.permission.denied'), t('reminders.permission.hint'));
+      }
+    } finally {
+      setLocalBusy(false);
+    }
   };
 
   const handleAcknowledge = (reminder: Reminder) => {
     markReminderAsAcknowledged(reminder.id);
     setReminders(loadReminders());
+    triggerHaptic('toggle');
     toast.info(t('reminders.item.markDone'), t('reminders.group.done'));
   };
 
   const handleRefresh = () => {
     const count = rebuild(preferences).length;
+    triggerHaptic('toggle');
     toast.success(t('reminders.refresh'), t('reminders.refreshed', count));
   };
 
@@ -754,18 +830,18 @@ export default function RemindersPage() {
             )}
           </section>
 
-          {/* Foreground Browser Notifications */}
+          {/* Offline Local Notifications */}
           <section className="card-padded mt-5">
             <h2
               className={`flex items-center gap-2 font-bold text-neutral-900 dark:text-white ${isBangla ? 'font-bangla' : ''}`}
             >
               <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              {t('reminders.permission.title')}
+              {t('reminders.local.title')}
             </h2>
             <p
               className={`mt-2 text-sm text-neutral-600 dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
             >
-              {t('reminders.permission.body')}
+              {t('reminders.local.body')}
             </p>
 
             {typeof Notification === 'undefined' ? (
@@ -774,32 +850,112 @@ export default function RemindersPage() {
               >
                 {t('reminders.permission.unsupported')}
               </p>
-            ) : notificationPermission === 'granted' ? (
-              <p
-                className={`mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 ${isBangla ? 'font-bangla' : ''}`}
-              >
-                <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {t('reminders.permission.granted')}
-              </p>
             ) : (
-              <button
-                type="button"
-                className="btn-secondary mt-3 whitespace-nowrap shrink-0"
-                onClick={() => void handleRequestPermission()}
-              >
-                <BellRing className="h-4 w-4" aria-hidden="true" />
-                {t('reminders.permission.grant')}
-              </button>
-            )}
+              <div className="mt-3 space-y-3">
+                {notificationPermission === 'granted' &&
+                preferences.enabled &&
+                preferences.browserNotifications ? (
+                  <p
+                    className={`flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {t('reminders.local.active')}
+                  </p>
+                ) : notificationPermission === 'denied' ? (
+                  <p
+                    className={`rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t('reminders.permission.denied')}
+                  </p>
+                ) : null}
 
-            {notificationPermission === 'granted' && (
-              <button
-                type="button"
-                className="btn-ghost btn-sm mt-2 whitespace-nowrap shrink-0"
-                onClick={() => void handleTestNotification()}
-              >
-                {t('reminders.test.title')}
-              </button>
+                <div className="rounded-lg border border-neutral-200/80 bg-neutral-50/70 p-3 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-800/40 dark:text-neutral-200">
+                  <p className={`font-semibold tabular-nums ${isBangla ? 'font-bangla' : ''}`}>
+                    {localSnapshot.scheduled.length > 0
+                      ? t(
+                          'reminders.local.scheduledCount',
+                          localiseNumber(localSnapshot.scheduled.length, language),
+                        )
+                      : t('reminders.local.noneScheduled')}
+                  </p>
+                  {localSnapshot.nextScheduled && (
+                    <p
+                      className={`mt-1 text-neutral-600 tabular-nums dark:text-neutral-300 ${isBangla ? 'font-bangla' : ''}`}
+                    >
+                      {t(
+                        'reminders.local.nextAlert',
+                        `${localSnapshot.nextScheduled.doseLabel[language]} (${localSnapshot.nextScheduled.profileName}) · ${formatDate(localSnapshot.nextScheduled.reminderDate, language)} ${localSettings.preferredTime}`,
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="local-notification-time"
+                    className={`label ${isBangla ? 'font-bangla' : ''}`}
+                  >
+                    {t('reminders.local.alertTime')}
+                  </label>
+                  <input
+                    id="local-notification-time"
+                    type="time"
+                    className="input-field max-w-[10rem] tabular-nums"
+                    value={localSettings.preferredTime}
+                    onChange={(event) => handleAlertTimeChange(event.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {!(
+                    notificationPermission === 'granted' &&
+                    preferences.enabled &&
+                    preferences.browserNotifications
+                  ) ? (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                      disabled={localBusy}
+                      onClick={() => void handleEnableLocalNotifications()}
+                    >
+                      <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('reminders.local.enable')}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                        disabled={localBusy}
+                        onClick={() => void handleSyncLocalNotifications()}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                        {t('reminders.local.sync')}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                        disabled={localBusy}
+                        onClick={handlePauseLocalNotifications}
+                      >
+                        {t('reminders.local.pause')}
+                      </button>
+                    </>
+                  )}
+
+                  {notificationPermission === 'granted' && (
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm whitespace-nowrap shrink-0"
+                      disabled={localBusy}
+                      onClick={() => void handleTestNotification()}
+                    >
+                      <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('reminders.local.test')}
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
             <p
               className={`mt-3 text-xs text-neutral-500 dark:text-neutral-400 ${isBangla ? 'font-bangla' : ''}`}
@@ -947,6 +1103,28 @@ export default function RemindersPage() {
                 </span>
                 <span className="block text-xs text-neutral-500 dark:text-neutral-400">
                   {t('reminders.permission.hint')}
+                </span>
+              </span>
+            </label>
+
+            <label className="mt-4 flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-emerald-600"
+                checked={hapticsEnabled}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setHapticsEnabled(next);
+                  setHapticsEnabledState(next);
+                  if (next) triggerHaptic('toggle');
+                }}
+              />
+              <span className={isBangla ? 'font-bangla' : undefined}>
+                <span className="block text-sm font-semibold text-neutral-900 dark:text-white">
+                  {t('reminders.settings.haptics')}
+                </span>
+                <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+                  {t('reminders.settings.hapticsHint')}
                 </span>
               </span>
             </label>

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BadgeCheck,
+  Clock,
   Download,
   FileJson,
   FileText,
+  Fingerprint,
   IdCard,
   Image,
+  Lock,
   Printer,
   QrCode,
   RefreshCw,
@@ -17,8 +20,18 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import {
+  PassportLockGate,
+  PassportSecurityCard,
+} from '../components/BiometricPassportGuard';
 import { QrScanner } from '../components/QrScanner';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useBiometricVaultState } from '../hooks';
+import {
+  isBiometricSessionUnlocked,
+  isCeremonyInProgress,
+  lockBiometricSession,
+} from '../lib/biometricLock';
 import { useProfiles } from '../contexts/ProfilesContext';
 import { useToast } from '../contexts/ToastContext';
 import { useI18n } from '../i18n';
@@ -75,6 +88,8 @@ export default function PassportPage() {
   const [verification, setVerification] = useState<PassportVerification | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StoredPassport | null>(null);
   const [printRef, setPrintRef] = useState<HTMLDivElement | null>(null);
+  const { snapshot: vaultSnapshot } = useBiometricVaultState();
+  const isVaultLocked = vaultSnapshot.enrolled && !vaultSnapshot.unlocked;
 
   const vaccineNameById = useMemo(
     () => new Map(allVaccines.map((vaccine) => [vaccine.id, vaccine.name])),
@@ -122,7 +137,38 @@ export default function PassportPage() {
     }
   }, [profileId, profiles]);
 
+  useEffect(() => {
+    if (!vaultSnapshot.enrolled || !vaultSnapshot.unlocked) return;
+
+    const handleVisibility = () => {
+      if (
+        document.visibilityState === 'hidden' &&
+        vaultSnapshot.config?.autoLock === 'immediate' &&
+        !isCeremonyInProgress()
+      ) {
+        lockBiometricSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const timer =
+      vaultSnapshot.config?.autoLock === '5m' || vaultSnapshot.config?.autoLock === '15m'
+        ? window.setInterval(() => {
+            isBiometricSessionUnlocked();
+          }, 15_000)
+        : null;
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (timer !== null) window.clearInterval(timer);
+    };
+  }, [vaultSnapshot.enrolled, vaultSnapshot.unlocked, vaultSnapshot.config?.autoLock]);
+
   const handleGenerate = useCallback(async () => {
+    if (isVaultLocked) {
+      toast.info(t('passport.biometric.lockedBanner'));
+      return;
+    }
     const profile = profiles.find((entry) => entry.id === profileId);
     if (!profile) {
       toast.error(t('passport.empty.title'), t('passport.empty.body'));
@@ -172,7 +218,7 @@ export default function PassportPage() {
     } finally {
       setBusy(false);
     }
-  }, [profileId, profiles, signingMode, t, toast]);
+  }, [isVaultLocked, profileId, profiles, signingMode, t, toast]);
 
   const handleVerify = async () => {
     const payload = verifyInput.trim();
@@ -201,7 +247,7 @@ export default function PassportPage() {
    * device. Either way the image never goes through a server.
    */
   const handleShare = async () => {
-    if (!active) return;
+    if (!active || isVaultLocked) return;
 
     const title = `${t('passport.certificate')} — ${active.memberName}`;
     // Prefer sharing the full high-resolution Vaccination Passport Card PNG;
@@ -225,7 +271,7 @@ export default function PassportPage() {
   };
 
   const handleDownloadPassportPdf = async () => {
-    if (!cardData) return;
+    if (!cardData || isVaultLocked) return;
     setExporting('pdf');
     try {
       await exportPassportAsPdf(cardData);
@@ -238,7 +284,7 @@ export default function PassportPage() {
   };
 
   const handleDownloadCardPNG = async () => {
-    if (!cardData) return;
+    if (!cardData || isVaultLocked) return;
     setExporting('png');
     try {
       const cardBlob = await exportPassportAsPng(cardData);
@@ -269,7 +315,7 @@ export default function PassportPage() {
   };
 
   const handleDownloadSVG = () => {
-    if (!active?.svg) return;
+    if (!active?.svg || isVaultLocked) return;
     downloadTextAsFile(
       `tikatrack-passport-${active.memberName.replace(/\s+/g, '-')}.svg`,
       active.svg,
@@ -279,7 +325,7 @@ export default function PassportPage() {
   };
 
   const handleDownloadJSON = () => {
-    if (!active) return;
+    if (!active || isVaultLocked) return;
     downloadTextAsFile(
       `tikatrack-passport-${active.memberName.replace(/\s+/g, '-')}.json`,
       JSON.stringify({ ...active, exportedAt: new Date().toISOString() }, null, 2),
@@ -289,23 +335,54 @@ export default function PassportPage() {
   };
 
   const handlePrint = () => {
-    if (!printRef) return;
+    if (!printRef || isVaultLocked) return;
     if (!printElement(printRef, t('passport.certificate'))) toast.error(t('common.status.error'));
   };
 
   return (
     <div className="page-shell max-w-5xl">
-      <header className="no-print border-b border-neutral-200 pb-6 dark:border-neutral-800">
-        <p className="eyebrow">
-          <IdCard className="h-3.5 w-3.5" aria-hidden="true" />
-          {t('nav.passport')}
-        </p>
-        <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
-          {t('passport.title')}
-        </h1>
-        <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
-          {t('passport.subtitle')}
-        </p>
+      <header className="no-print flex flex-wrap items-start justify-between gap-4 border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <div>
+          <p className="eyebrow">
+            <IdCard className="h-3.5 w-3.5" aria-hidden="true" />
+            {t('nav.passport')}
+          </p>
+          <h1 className={`section-title mt-2 ${isBangla ? 'font-bangla' : ''}`}>
+            {t('passport.title')}
+          </h1>
+          <p className={`section-subtitle ${isBangla ? 'font-bangla' : ''}`}>
+            {t('passport.subtitle')}
+          </p>
+        </div>
+
+        {vaultSnapshot.enrolled && (
+          <div className="flex items-center gap-2 pt-1">
+            {isVaultLocked ? (
+              <span className="badge-due">
+                <Lock className="h-3 w-3" aria-hidden="true" />
+                {t('passport.biometric.status.locked')}
+              </span>
+            ) : (
+              <>
+                <span className="badge-done">
+                  <Fingerprint className="h-3 w-3" aria-hidden="true" />
+                  {t('passport.biometric.status.protected')}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm whitespace-nowrap shrink-0"
+                  onClick={() => {
+                    lockBiometricSession();
+                    toast.info(t('passport.biometric.lockedToast'));
+                  }}
+                >
+                  <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('passport.biometric.lockNow')}</span>
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </header>
 
       {profiles.length === 0 ? (
@@ -346,11 +423,16 @@ export default function PassportPage() {
                       : memberStale
                         ? t('passport.status.outdated')
                         : t('passport.status.issued');
-                    const dotClass = !memberPassport
-                      ? 'bg-neutral-300 dark:bg-neutral-600'
+                    const StatusIcon = !memberPassport
+                      ? QrCode
                       : memberStale
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500';
+                        ? Clock
+                        : BadgeCheck;
+                    const iconClass = !memberPassport
+                      ? 'text-neutral-400 dark:text-neutral-500'
+                      : memberStale
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-emerald-600 dark:text-emerald-400';
                     return (
                       <button
                         key={member.id}
@@ -362,7 +444,7 @@ export default function PassportPage() {
                             : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
                         }`}
                       >
-                        <span className={`h-2 w-2 rounded-full ${dotClass}`} aria-hidden="true" />
+                        <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${iconClass}`} aria-hidden="true" />
                         <span className="font-semibold">{member.name}</span>
                         <span className="text-[11px] opacity-75">{statusText}</span>
                       </button>
@@ -406,7 +488,7 @@ export default function PassportPage() {
                 <button
                   type="button"
                   className="btn-primary"
-                  disabled={busy || !selectedProfile}
+                  disabled={busy || !selectedProfile || isVaultLocked}
                   onClick={() => void handleGenerate()}
                 >
                   {active ? (
@@ -433,6 +515,9 @@ export default function PassportPage() {
                 </p>
               )}
             </div>
+
+            {/* --- Biometric Passport Security ---------------------------- */}
+            <PassportSecurityCard memberDisplayName={selectedProfile?.name} />
 
             {/* --- What this is ------------------------------------------- */}
             <div className="card-padded mt-5">
@@ -571,8 +656,10 @@ export default function PassportPage() {
           </div>
 
           {/* --- Certificate --------------------------------------------- */}
-          <div>
-            {!active || !rendered ? (
+          <div className={isVaultLocked ? 'order-first lg:order-last' : undefined}>
+            {isVaultLocked ? (
+              <PassportLockGate onPassportsCleared={() => setStored(loadPassports())} />
+            ) : !active || !rendered ? (
               <div className="card-padded flex h-full min-h-72 flex-col items-center justify-center text-center">
                 <QrCode
                   className="h-12 w-12 text-neutral-300 dark:text-neutral-700"
@@ -624,7 +711,7 @@ export default function PassportPage() {
                   className="print-area overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
                 >
                   {/* Passport Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800 bg-emerald-900 px-5 py-4 text-white dark:bg-emerald-950">
+                  <div className="bg-clinical-grid flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800 bg-emerald-900 px-5 py-4 text-white dark:bg-emerald-950">
                     <div>
                       <p className="text-[11px] font-semibold tracking-widest text-emerald-200 uppercase">
                         TikaTrack · {t('passport.certificate')}
@@ -634,7 +721,12 @@ export default function PassportPage() {
                       </h2>
                     </div>
                     <div className="text-left sm:text-right">
-                      <p className="text-[11px] font-medium text-emerald-200">{t('passport.id')}</p>
+                      <p className="text-[11px] font-medium text-emerald-200">
+                        {t('passport.id')} ·{' '}
+                        <span className="font-mono uppercase">
+                          {active.algorithm === 'ecdsa-p256' ? 'ECDSA P-256' : 'HMAC-SHA256'}
+                        </span>
+                      </p>
                       <p className="font-mono text-xs font-semibold tabular-nums">{active.id}</p>
                     </div>
                   </div>

@@ -188,6 +188,9 @@ export function loadReminderPreferences(): ReminderPreferences {
  */
 export function saveReminderPreferences(preferences: ReminderPreferences): void {
   localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tikatrack:reminder-prefs-changed'));
+  }
 }
 
 /**

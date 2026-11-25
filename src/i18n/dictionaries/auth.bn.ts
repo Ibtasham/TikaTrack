@@ -75,4 +75,12 @@ export const bn: TranslationDictionary = {
     'আপনার পরিবারের প্রোফাইল, ডোজের ইতিহাস ও বৃদ্ধির তথ্য এই ব্রাউজার, ফায়ারস্টোর ও ক্লাউড এসকিউএল-এ স্বয়ংক্রিয়ভাবে সংরক্ষিত থাকে।',
   'auth.orOfflineAccount': 'অথবা অফলাইন ব্রাউজার অ্যাকাউন্ট ব্যবহার করুন',
   'auth.profilesCount': '{0}টি পরিবারের প্রোফাইল',
+  'auth.biometric.title': 'মোবাইল বায়োমেট্রিক পাসপোর্ট',
+  'auth.biometric.enrolledBody':
+    '{0}-এ পাসকি যুক্ত আছে। টিকাদান পাসপোর্ট আনলক করে দেখতে বায়োমেট্রিক দিয়ে যাচাই করুন।',
+  'auth.biometric.readyBody':
+    'ডিজিটাল QR পাসপোর্ট লক করতে আপনার ফোনের Face ID, Touch ID বা ফিঙ্গারপ্রিন্ট সেন্সর ব্যবহার করুন।',
+  'auth.biometric.unlockPassport': 'আনলক করে পাসপোর্ট খুলুন',
+  'auth.biometric.managePassport': 'পাসপোর্ট লক পরিচালনা করুন',
+  'auth.biometric.setupPassport': 'বায়োমেট্রিক লক সেটআপ করুন',
 };

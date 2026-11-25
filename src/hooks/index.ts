@@ -1,5 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { applyServiceWorkerUpdate, registerServiceWorker } from '../lib/serviceWorker';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  detectBiometricSupport,
+  getVaultSessionSnapshot,
+  subscribeVaultSession,
+  type BiometricSupportInfo,
+  type VaultSessionSnapshot,
+} from '../lib/biometricLock';
+import {
+  getLocalNotificationSnapshot,
+  subscribeLocalNotifications,
+  type LocalNotificationSnapshot,
+} from '../lib/localNotifications';
+import {
+  applyServiceWorkerUpdate,
+  ensureOfflineDataServiceWorker,
+  registerServiceWorker,
+} from '../lib/serviceWorker';
 import { readJSON, writeJSON } from '../lib/storage';
 
 /**
@@ -251,6 +267,10 @@ export function useServiceWorkerUpdate(
     ).then((next) => {
       if (next) registration.current = next;
     });
+
+    if (!enabled && import.meta.env.MODE !== 'test') {
+      void ensureOfflineDataServiceWorker();
+    }
   }, [enabled]);
 
   const applyUpdate = useCallback(async () => {
@@ -363,4 +383,46 @@ export function useFocusTrap<T extends HTMLElement>(
   }, [active]);
 
   return container;
+}
+
+/**
+ * Reactive subscription to the client-side WebAuthn / PIN biometric passport vault
+ * and hardware capability detection.
+ */
+export function useBiometricVaultState(): {
+  snapshot: VaultSessionSnapshot;
+  support: BiometricSupportInfo | null;
+} {
+  const [snapshot, setSnapshot] = useState<VaultSessionSnapshot>(() =>
+    getVaultSessionSnapshot(),
+  );
+  const [support, setSupport] = useState<BiometricSupportInfo | null>(null);
+
+  useEffect(() => {
+    setSnapshot(getVaultSessionSnapshot());
+    const unsub = subscribeVaultSession(() => {
+      setSnapshot(getVaultSessionSnapshot());
+    });
+    let cancelled = false;
+    void detectBiometricSupport().then((info) => {
+      if (!cancelled) setSupport(info);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  return { snapshot, support };
+}
+
+/**
+ * Reactive subscription to the offline Local Notification scheduler queue & state.
+ */
+export function useLocalNotifications(): LocalNotificationSnapshot {
+  return useSyncExternalStore(
+    subscribeLocalNotifications,
+    getLocalNotificationSnapshot,
+    getLocalNotificationSnapshot,
+  );
 }
